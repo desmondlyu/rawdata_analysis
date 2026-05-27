@@ -20,7 +20,7 @@
     </div>
   </header>
 
-  <main class="max-w-[96vw] mx-auto px-4 py-8 space-y-3">
+  <main class="max-w-[96vw] mx-auto px-4 py-8 space-y-0">
     <section class="entry-tabs-wrap">
       <div class="entry-tabs" role="tablist" aria-label="入口功能切換">
         <button id="entry-tab-analysis" type="button" class="entry-tab-btn is-active" data-entry-tab="analysis" aria-selected="true">資料分析</button>
@@ -97,9 +97,8 @@
 
     <section id="station-tabs-section" class="card p-0 hidden overflow-hidden">
       <div id="station-tabs" class="station-tabs" role="tablist" aria-label="站點切換"></div>
+      <section id="kpi-section" class="kpi-grid hidden"></section>
     </section>
-
-    <section id="kpi-section" class="kpi-grid hidden"></section>
 
     <section id="chart-section" class="card p-6 hidden">
       <div class="chart-toolbar mb-4">
