@@ -37,74 +37,6 @@
 | **站點** | 測試站點 | S1P1, DS00, DS03, DS05, SFIN, SPRE |
 | **YYYYMMDDHHMMSS** | 時間戳記 | 20260112181636 |
 
-### 必填檔案
-
-| 檔案格式 | 說明 |
-|---------|------|
-| **.TXT 文字檔** | 測試執行的原始 RAWDATA 檔案（可多選） |
-
-### 文字檔檔名格式（Rawdata）
-
-基本格式：
-```
-批號_Wafer刻號_YYYYMMDDHHMMSS_SITE.txt
-```
-
-範例：
-```
-65296Z600_Wafer01_20260112162545_S0001.txt
-```
-
-| 欄位 | 解析結果 |
-|------|----------|
-| 批號 | `65296Z600` |
-| Wafer 刻號 | `01` |
-| 日期時間 | `20260112162545` |
-| 測試 SITE | `S0001` → 取數字後為 `1` |
-
----
-
-## 🔍 資料提取規則
-
-### 搜尋特徵字串
-
-系統會在 .TXT 檔中搜尋以下特定格式的整行字串：
-
-```
-*<<< Test Time >>>,*(S)
-```
-
-**完整範例**：
-```
-G:----:----,----:001:<<< Test Time >>>, 84, Pulse_Red_Auto_Pre_PGM, 0.474280 ,(S)
-```
-
-### 測試站點時間特徵字串（Total Test Time）
-
-系統也會搜尋每份 RAWDATA 的 Touch Down 時間行：
-
-```
-F:----:----,----:TD:Total Test Time = 時間 (S)
-```
-
-**完整範例**：
-```
-F:----:----,----:001:Total Test Time = 796.613 (S)
-```
-
-### 資料擷取邏輯
-
-| 步驟 | 擷取內容 | 變數名稱 | 範例 |
-|-----|---------|---------|------|
-| 1 | 特徵字串後的第一個數字 | Test No | `84` |
-| 2 | 特徵字串後的第二個欄位 | Test Item | `Pulse_Red_Auto_Pre_PGM` |
-| 3 | 數值部分（浮點數） | Value | `0.474280` |
-| 4 | 單位 | Unit | `S`（秒） |
-| 5 | 資料夾名稱中的 Wafer ID | Wafer_ID | `01` |
-| 6 | 資料夾名稱中的時間戳記 | Test_DateTime | `2026-01-12 18:16:36` |
-
----
-
 ## 📊 統計分析項目
 
 系統會對每個 **Test Item** 的所有數值進行以下統計：
@@ -127,11 +59,30 @@ F:----:----,----:001:Total Test Time = 796.613 (S)
 
 1. 點擊 **📂 選擇資料夾** 按鈕
 2. 可選 **資料夾匯入** 或 **單選 .TXT 檔案**
-3. 資料夾模式會自動導航至 `home\winbond\rawdata\` 子目錄
+3. 支援 **多個產品別 + 多個測試站點** 同時分析
+
+### 多產品別與多站點資料夾擺放關係
+
+建議主目錄如下（同一次可放多個產品）：
+
+```
+主目錄
+├─ FAG112
+│  ├─ RW_*_LOTNO_WAFERID_S1P1_YYYYMMDDHHMMSS\home\winbond\rawdata\*.txt
+│  └─ RW_*_LOTNO_WAFERID_DS05_YYYYMMDDHHMMSS\home\winbond\rawdata\*.txt
+├─ EAG301
+│  ├─ RW_*_LOTNO_WAFERID_SPRE_YYYYMMDDHHMMSS\home\winbond\rawdata\*.txt
+│  └─ RW_*_LOTNO_WAFERID_DS00_YYYYMMDDHHMMSS\home\winbond\rawdata\*.txt
+└─ ...
+```
+
+- 第一層：產品別（如 `FAG112`, `EAG301`）
+- 第二層：站點資料夾（依 `RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS` 命名）
+- 第三層固定：`home\winbond\rawdata\*.txt`
 
 ### 步驟二：自動掃描 .TXT 檔案
 
-- 系統自動掃描子目錄下所有 `.TXT` 檔案
+- 系統自動掃描各產品、各站點子目錄下所有 `.TXT` 檔案
 - 顯示找到的檔案列表及檔案大小
 - 若無 .TXT 檔案，顯示錯誤提示
 
@@ -146,10 +97,10 @@ F:----:----,----:001:Total Test Time = 796.613 (S)
 
 分析完成後顯示：
 - 站點分頁（Tab）切換不同測試站點儀表板
+- 產品分頁（Tab）切換不同產品的統計表與 Site/TD 分析
 - 總摘要 KPI（TEST SITE 數、發現的 Test Item 數、測試站點時間、Touch Down 數等）
 - Test Item 列表及統計資訊
-- 執行次數分布
-- Count / Mean / Range / TT Ratio/站點 四張統計圖
+- Count / Mean / Range / TT Ratio/站點 四張統計圖（可依指定產品做排序基準）
 
 ---
 
