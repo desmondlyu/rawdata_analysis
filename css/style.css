@@ -17,6 +17,19 @@ body {
   background: linear-gradient(135deg, #1d4ed8 0%, #4338ca 100%);
 }
 
+.hero-title-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.hero-title-icon {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--border);
@@ -391,6 +404,16 @@ body {
 }
 
 @media (max-width: 640px) {
+  .hero-title-wrap {
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+
+  .hero-title-icon {
+    width: 56px;
+    height: 56px;
+  }
+
   .kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
