@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rawdata Analysis — Test Time 統計</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="min-h-screen">
+  <header class="gradient-header text-white py-12 px-6 text-center">
+    <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight mb-3">TTO Analysis</h1>
+    <p class="text-blue-100 text-lg">NOR Flash CP Test 時間優化分析工具</p>
+  </header>
+
+  <main class="max-w-[96vw] mx-auto px-4 py-8 space-y-6">
+    <section class="card p-6">
+      <p class="step-label mb-4">步驟零：輸入產品名稱</p>
+      <div class="mb-6 grid md:grid-cols-[1fr_auto] gap-4 items-start">
+        <div>
+          <label for="product-input" class="block text-sm mb-2 hint-text">產品名稱（顯示於 Dashboard 與 XLSX）</label>
+          <input id="product-input" type="text" class="input-field w-full md:w-96" placeholder="例如：EAG119C">
+        </div>
+        <div class="rounded-xl p-4 folder-summary md:min-w-[380px]">
+          <p class="text-xs mb-1 folder-summary-label">目前來源</p>
+          <p id="folder-name" class="font-semibold break-all folder-summary-value">尚未選擇</p>
+        </div>
+      </div>
+
+      <p class="step-label mb-4">步驟一：選擇資料來源</p>
+      <div class="grid gap-4 items-center">
+        <div>
+        <div class="source-mode-group mb-3" role="radiogroup" aria-label="資料來源模式">
+          <label class="source-mode-option">
+            <input type="radio" name="source-mode" value="folder" checked>
+            <span>資料夾匯入</span>
+          </label>
+          <label class="source-mode-option">
+            <input type="radio" name="source-mode" value="txt">
+            <span>單選 .TXT 檔案</span>
+          </label>
+        </div>
+        <input
+          id="folder-input"
+          type="file"
+          class="hidden"
+          webkitdirectory
+          directory
+          multiple
+        >
+        <input id="txt-input" type="file" class="hidden" accept=".txt,.TXT">
+        <button id="pick-btn" class="primary-btn w-full md:w-auto px-6 py-3 rounded-xl font-bold">
+          📂 選擇上傳檔案
+        </button>
+        <p class="text-sm mt-3 hint-text">
+          規則：先勾選模式再上傳。<code>資料夾匯入</code>會讀取符合
+          <code>產品主目錄/RW_P_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/home/winbond/rawdata</code> 的 .TXT（例如：
+          <code>FAG112/RW_P_..._S1P1_.../home/winbond/rawdata</code>）；
+          <code>單選 .TXT 檔案</code>則直接解析你選的單一檔案。
+        </p>
+      </div>
+      </div>
+
+      <div id="folder-meta" class="mt-4 grid sm:grid-cols-2 lg:grid-cols-4 gap-3 hidden"></div>
+      <p id="message" class="mt-4 text-sm msg-info"></p>
+      <div id="progress-wrap" class="mt-3 hidden">
+        <div class="progress-track">
+          <div id="progress-bar" class="progress-fill"></div>
+        </div>
+      </div>
+      <div class="mt-5 flex flex-wrap gap-3">
+        <button id="analyze-btn" class="primary-btn px-8 py-3 rounded-xl font-bold" disabled>
+          ▶ 開始分析
+        </button>
+        <button id="export-btn" class="secondary-btn px-8 py-3 rounded-xl font-bold" disabled>
+          📤 匯出 XLSX
+        </button>
+      </div>
+    </section>
+
+    <section id="station-tabs-section" class="card p-4 hidden">
+      <div id="station-tabs" class="station-tabs" role="tablist" aria-label="站點切換"></div>
+    </section>
+
+    <section id="kpi-section" class="kpi-grid hidden"></section>
+
+    <section id="chart-section" class="card p-6 hidden">
+      <h2 class="text-xl font-bold mb-4">統計圖表</h2>
+      <div class="grid lg:grid-cols-2 gap-6">
+        <div class="chart-box">
+          <canvas id="count-chart" aria-label="Test Item 執行次數圖"></canvas>
+        </div>
+        <div class="chart-box">
+          <canvas id="mean-chart" aria-label="Test Item 平均秒數圖"></canvas>
+        </div>
+        <div class="chart-box">
+          <canvas id="range-chart" aria-label="Test Item 級距圖"></canvas>
+        </div>
+        <div class="chart-box">
+          <canvas id="tt-ratio-chart" aria-label="TT Ratio/站點"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <section id="table-section" class="card p-0 overflow-hidden hidden">
+      <div class="p-6 border-b border-slate-700">
+        <h2 class="text-xl font-bold">Test Item 統計表</h2>
+      </div>
+      <div class="overflow-auto">
+        <table class="min-w-full stat-table">
+          <thead id="stats-thead">
+            <tr>
+              <th><button type="button" class="sort-btn" data-sort-key="testItem">Test Item</button></th>
+              <th><button type="button" class="sort-btn" data-sort-key="count">Count</button></th>
+              <th><button type="button" class="sort-btn" data-sort-key="mean">Mean (s)</button></th>
+              <th><button type="button" class="sort-btn" data-sort-key="median">Median (s)</button></th>
+              <th><button type="button" class="sort-btn" data-sort-key="range">Range (s)</button></th>
+              <th><button type="button" class="sort-btn" data-sort-key="ttRatio">TT Ratio/站點</button></th>
+              <th><button type="button" class="sort-btn" data-sort-key="min">Min (s)</button></th>
+              <th><button type="button" class="sort-btn" data-sort-key="max">Max (s)</button></th>
+            </tr>
+          </thead>
+          <tbody id="stats-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="site-td-section" class="card p-6 hidden">
+      <h2 class="text-xl font-bold mb-4">Test Time by Site / Touch Down 分析</h2>
+      <div id="site-td-heatmap" class="heatmap-wrap heatmap-wrap--half"></div>
+    </section>
+  </main>
+  <footer class="px-6 py-6 text-center text-sm text-slate-400">
+    作者: PP32 YPLu (Desmond)
+  </footer>
+
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="js/siteTdHeatmapReact.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
