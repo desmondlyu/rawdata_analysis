@@ -18,34 +18,51 @@ body {
 }
 
 .entry-tabs-wrap {
-  display: flex;
-  justify-content: flex-start;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 0.95rem 0.95rem 0 0;
+  background: #111b2f;
+  overflow: hidden;
 }
 
 .entry-tabs {
-  display: inline-flex;
-  gap: 0.2rem;
-  padding: 0.2rem;
-  border: 1px solid #1e293b;
-  background: #0b1220;
-  border-radius: 0.8rem;
+  display: flex;
+  gap: 0.25rem;
+  width: 100%;
+  overflow-x: auto;
+  padding: 0.8rem 0.85rem 0;
+  border-bottom: 1px solid var(--border);
 }
 
 .entry-tab-btn {
   border: 1px solid transparent;
+  border-bottom: none;
   background: transparent;
   color: #94a3b8;
-  border-radius: 0.65rem;
-  padding: 0.45rem 0.95rem;
-  font-size: 0.9rem;
+  border-radius: 0.85rem 0.85rem 0 0;
+  margin-bottom: -1px;
+  padding: 0.55rem 1.1rem;
+  font-size: 0.95rem;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .entry-tab-btn.is-active,
 .entry-tab-btn[aria-selected="true"] {
-  background: #1d4ed8;
-  border-color: #3b82f6;
-  color: #eff6ff;
+  background: #0f172a;
+  border-color: #334155;
+  border-bottom-color: #0f172a;
+  color: #60a5fa;
+}
+
+.entry-tab-btn:hover {
+  background: #1e293b;
+  color: #e2e8f0;
+}
+
+#analysis-page {
+  display: grid;
+  gap: 0.65rem;
 }
 
 .guide-content {
@@ -239,30 +256,36 @@ body {
 
 .station-tabs {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
+  gap: 0.3rem;
+  overflow-x: auto;
+  padding: 0.6rem 0.85rem 0;
+  border-bottom: 1px solid var(--border);
 }
 
 .station-tab-btn {
-  border: 1px solid #334155;
-  background: #0b1220;
+  border: 1px solid transparent;
+  border-bottom: none;
+  background: transparent;
   color: #cbd5e1;
-  border-radius: 9999px;
-  padding: 0.42rem 0.95rem;
-  font-size: 0.82rem;
+  border-radius: 0.85rem 0.85rem 0 0;
+  margin-bottom: -1px;
+  padding: 0.5rem 1rem;
+  font-size: 0.92rem;
   font-weight: 700;
+  white-space: nowrap;
   transition: all 0.2s ease;
 }
 
 .station-tab-btn:hover {
-  border-color: #475569;
-  background: #111827;
+  background: #1e293b;
+  color: #f8fafc;
 }
 
 .station-tab-btn[aria-selected="true"] {
-  background: #1d4ed8;
-  border-color: #3b82f6;
-  color: #eff6ff;
+  background: #0f172a;
+  border-color: #334155;
+  border-bottom-color: #0f172a;
+  color: #60a5fa;
 }
 
 .meta-chip {

@@ -1,6 +1,7 @@
 const APP = {
   files: [],
   rootName: "",
+  entryMode: "analysis",
   sourceMode: "none",
   manualProductName: "",
   products: new Map(),
@@ -23,11 +24,15 @@ const dom = {
   pickBtn: document.getElementById("pick-btn"),
   folderInput: document.getElementById("folder-input"),
   txtInput: document.getElementById("txt-input"),
+  xlsxInput: document.getElementById("xlsx-input"),
+  sourceModeGroup: document.getElementById("source-mode-group"),
+  sourceRuleText: document.getElementById("source-rule-text"),
   sourceModeRadios: document.querySelectorAll('input[name="source-mode"]'),
   productInput: document.getElementById("product-input"),
   folderName: document.getElementById("folder-name"),
   folderMeta: document.getElementById("folder-meta"),
   entryTabAnalysis: document.getElementById("entry-tab-analysis"),
+  entryTabXlsx: document.getElementById("entry-tab-xlsx"),
   entryTabGuide: document.getElementById("entry-tab-guide"),
   analysisPage: document.getElementById("analysis-page"),
   guidePage: document.getElementById("guide-page"),
@@ -54,6 +59,7 @@ const dom = {
 dom.pickBtn.addEventListener("click", onPickSourceClick);
 dom.folderInput.addEventListener("change", handleFolderSelection);
 dom.txtInput.addEventListener("change", handleTxtSelection);
+dom.xlsxInput.addEventListener("change", handleXlsxSelection);
 dom.productInput.addEventListener("input", onProductNameChange);
 dom.analyzeBtn.addEventListener("click", startAnalysis);
 dom.exportBtn.addEventListener("click", exportXlsx);
@@ -63,11 +69,18 @@ dom.siteProductTabs?.addEventListener("click", onProductTabClick);
 dom.statsThead?.addEventListener("click", onStatsHeadClick);
 dom.chartSortProduct?.addEventListener("change", onChartSortProductChange);
 dom.entryTabAnalysis?.addEventListener("click", () => switchEntryPage("analysis"));
+dom.entryTabXlsx?.addEventListener("click", () => switchEntryPage("xlsx"));
 dom.entryTabGuide?.addEventListener("click", () => switchEntryPage("guide"));
 
 initializeGuidePage();
+applyEntryModeUI();
 
 function onPickSourceClick() {
+  if (APP.entryMode === "xlsx") {
+    dom.xlsxInput.value = "";
+    dom.xlsxInput.click();
+    return;
+  }
   const selected = Array.from(dom.sourceModeRadios).find((r) => r.checked)?.value ?? "folder";
   if (selected === "folder") {
     dom.folderInput.value = "";
@@ -228,10 +241,13 @@ function resetResultsUI() {
 }
 
 function updateAnalyzeState() {
-  const hasRawFiles = getTotalRawTxtCount() > 0;
-  const hasManualProduct = APP.manualProductName.length > 0;
-  const hasAutoProduct = getProducts().length > 0;
-  dom.analyzeBtn.disabled = !(hasRawFiles && (hasManualProduct || hasAutoProduct));
+  if (APP.sourceMode === "xlsx") dom.analyzeBtn.disabled = APP.files.length === 0;
+  else {
+    const hasRawFiles = getTotalRawTxtCount() > 0;
+    const hasManualProduct = APP.manualProductName.length > 0;
+    const hasAutoProduct = getProducts().length > 0;
+    dom.analyzeBtn.disabled = !(hasRawFiles && (hasManualProduct || hasAutoProduct));
+  }
   dom.exportBtn.disabled = !hasAnalyzedData();
 }
 
@@ -377,6 +393,23 @@ function handleTxtSelection(event) {
   updateAnalyzeState();
 }
 
+function handleXlsxSelection(event) {
+  APP.sourceMode = "xlsx";
+  APP.files = Array.from(event.target.files || []).filter((f) => /\.(xlsx|xls)$/i.test(f.name));
+  APP.rootName = APP.files.length ? `匯入 XLSX（${APP.files.length} 檔）` : "";
+  APP.products.clear();
+  APP.activeStation = "";
+  APP.activeProduct = "";
+  resetResultsUI();
+
+  dom.folderName.textContent = APP.files.length ? APP.rootName : "尚未選擇";
+  renderMeta([{ product: "-", lotNo: "-", waferId: "-", station: "-" }]);
+
+  if (!APP.files.length) showMessage("未選到任何 XLSX 檔案。", "error");
+  else showMessage(`已選擇 ${APP.files.length} 個 XLSX 檔案。`, "success");
+  updateAnalyzeState();
+}
+
 function buildMetaCards() {
   if (APP.sourceMode === "txt") {
     const name = APP.manualProductName || getProducts()[0]?.name || "-";
@@ -414,6 +447,11 @@ function renderMeta(cards) {
 }
 
 async function startAnalysis() {
+  if (APP.sourceMode === "xlsx") {
+    await startAnalysisFromXlsx();
+    return;
+  }
+
   APP.manualProductName = dom.productInput.value.trim();
   const totalFiles = getTotalRawTxtCount();
   if (!totalFiles) {
@@ -507,6 +545,248 @@ async function startAnalysis() {
     "success",
   );
   updateAnalyzeState();
+}
+
+async function startAnalysisFromXlsx() {
+  if (!APP.files.length) {
+    showMessage("請先選擇 XLSX 檔案。", "error");
+    updateAnalyzeState();
+    return;
+  }
+  if (typeof XLSX === "undefined") {
+    showMessage("XLSX 元件尚未載入。", "error");
+    updateAnalyzeState();
+    return;
+  }
+
+  APP.products.clear();
+  APP.activeStation = "";
+  APP.activeProduct = "";
+  resetResultsUI();
+
+  dom.analyzeBtn.disabled = true;
+  dom.progressWrap.classList.remove("hidden");
+  setProgress(0);
+  showMessage("開始解析 XLSX 檔案...", "info");
+
+  let processed = 0;
+  for (const file of APP.files) {
+    const buf = await file.arrayBuffer();
+    const workbook = XLSX.read(buf, { type: "array" });
+    importWorkbookData(workbook);
+    processed += 1;
+    setProgress(Math.round((processed / APP.files.length) * 100));
+  }
+
+  const stationNames = getStationNames().filter((name) => getProductsInStation(name).length > 0);
+  if (!stationNames.length) {
+    showMessage("匯入的 XLSX 未包含可用的統計資料。", "error");
+    updateAnalyzeState();
+    return;
+  }
+
+  APP.activeStation = stationNames[0];
+  syncActiveProductForStation();
+  renderMeta(buildMetaCards());
+  renderStationTabs(stationNames);
+  renderProductTabs();
+  renderChartSortOptions();
+  renderKpi();
+  renderTable();
+  renderCharts();
+  renderSiteTdChart();
+  showMessage(`XLSX 匯入完成：共 ${getProducts().length} 產品、${stationNames.length} 站點。`, "success");
+  updateAnalyzeState();
+}
+
+function importWorkbookData(workbook) {
+  const summaryEntries = parseSummaryEntries(workbook);
+  const dataSheets = workbook.SheetNames.filter((name) => name !== "Summary");
+  const statsSheets = [];
+  const siteSheets = [];
+
+  for (const sheetName of dataSheets) {
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: true, defval: "" });
+    const header = rows[0] ?? [];
+    if (isStatsSheet(header)) statsSheets.push({ sheetName, rows });
+    else if (isSiteSheet(header)) siteSheets.push({ sheetName, rows });
+  }
+
+  const entryCount = Math.max(summaryEntries.length, statsSheets.length, siteSheets.length);
+  for (let idx = 0; idx < entryCount; idx += 1) {
+    const summary = summaryEntries[idx] ?? {};
+    const inferred = parseEntryFromSheetName(statsSheets[idx]?.sheetName || siteSheets[idx]?.sheetName || "");
+    const keyParsed = parseSummaryEntryKey(summary.key);
+    const productName = String(summary.product || keyParsed.product || inferred.product || "").trim() || "UNSPECIFIED";
+    const stationName = String(summary.station || keyParsed.station || inferred.station || "").trim() || "UNSPECIFIED";
+    const rootName = String(summary.root || "").trim() || `${productName}_${stationName}`;
+    const parsedMeta = parseRootMeta(rootName);
+    const lotNo = String(summary.lotNo || summary.lot || "").trim();
+    const waferId = String(summary.waferId || summary.wafer || "").trim();
+
+    const product = ensureProduct(productName);
+    const station = ensureStation(product, stationName, rootName, parsedMeta);
+    station.rootFolderName = rootName;
+    station.parsedMeta = parsedMeta;
+
+    const statRows = statsSheets[idx]?.rows ?? [];
+    if (statRows.length > 1) station.stats = parseStatsRows(statRows);
+
+    const siteRows = siteSheets[idx]?.rows ?? [];
+    if (siteRows.length > 1) station.siteTdMap = parseSiteTdRows(siteRows);
+
+    const summaryTd = Number.parseInt(summary.touchDownCount || "0", 10);
+    station.touchDownCount = Number.isFinite(summaryTd) ? summaryTd : 0;
+
+    const summaryTotal = Number.parseFloat(summary.stationTotalTimeSeconds || "0");
+    const derivedTotal = calculateStationTotalFromSiteTd(station.siteTdMap);
+    station.stationTotalTime = Number.isFinite(derivedTotal) && derivedTotal > 0 ? derivedTotal : (Number.isFinite(summaryTotal) ? summaryTotal : 0);
+    if (!station.touchDownCount || station.touchDownCount <= 0) station.touchDownCount = countTouchDown(station.siteTdMap);
+
+    if (parsedMeta) {
+      product.lotNos.add(parsedMeta.lotNo);
+      product.waferIds.add(parsedMeta.waferId);
+      product.datetimes.add(parsedMeta.datetime);
+    }
+    if (lotNo) product.lotNos.add(lotNo);
+    if (waferId) product.waferIds.add(waferId);
+    product.rootNames.add(rootName);
+  }
+}
+
+function parseSummaryEntries(workbook) {
+  const summary = workbook.Sheets.Summary;
+  if (!summary) return [];
+  const rows = XLSX.utils.sheet_to_json(summary, { header: 1, raw: true, defval: "" });
+  if (!rows.length) return [];
+  const header = rows[0].map((v) => String(v || "").trim());
+  const entries = [];
+  for (let col = 1; col < header.length; col += 1) entries.push({ key: header[col] });
+  for (let r = 1; r < rows.length; r += 1) {
+    const row = rows[r];
+    const field = String(row[0] || "").trim();
+    if (!field) continue;
+    for (let col = 1; col < header.length; col += 1) {
+      const entry = entries[col - 1];
+      if (!entry) continue;
+      entry[fieldToSummaryKey(field)] = String(row[col] ?? "").trim();
+    }
+  }
+  return entries;
+}
+
+function fieldToSummaryKey(field) {
+  const raw = String(field || "").trim();
+  const normalized = raw.replaceAll(/\s+/g, "").replaceAll("_", "").toLowerCase();
+  if (normalized === "product" || normalized === "產品名稱" || normalized === "產品") return "product";
+  if (normalized === "root" || normalized === "rootfolder" || normalized === "主目錄") return "root";
+  if (normalized === "station" || normalized === "站點") return "station";
+  if (normalized === "lotno" || normalized === "lot" || normalized === "批號") return "lotNo";
+  if (normalized === "waferid" || normalized === "wafer" || normalized === "晶圓id") return "waferId";
+  if (normalized === "touchdowncount") return "touchDownCount";
+  if (normalized === "stationtotaltimeseconds") return "stationTotalTimeSeconds";
+  return raw;
+}
+
+function parseSummaryEntryKey(key) {
+  const text = String(key || "").trim();
+  if (!text) return { product: "", station: "" };
+  const parts = text.split("_").filter(Boolean);
+  if (parts.length < 2) return { product: "", station: "" };
+  const station = parts[parts.length - 1];
+  const product = parts.slice(0, -1).join("_");
+  return { product, station };
+}
+
+function isStatsSheet(header) {
+  const h = header.map((v) => String(v || "").trim());
+  return h.includes("Test Item") && h.includes("Count") && h.includes("Mean(s)");
+}
+
+function isSiteSheet(header) {
+  const h = header.map((v) => String(v || "").trim());
+  return h.includes("TouchDown") && h.includes("Site") && h.includes("Time(s)");
+}
+
+function parseEntryFromSheetName(sheetName) {
+  const text = String(sheetName || "");
+  const m = text.match(/^(.+)_([^_]+)_(TestItem_Stats|Site_TouchDown)$/i);
+  if (!m) return { product: "", station: "" };
+  return { product: m[1], station: m[2] };
+}
+
+function parseStatsRows(rows) {
+  const stats = [];
+  for (let i = 1; i < rows.length; i += 1) {
+    const row = rows[i] ?? [];
+    const testItem = String(row[1] ?? "").trim();
+    if (!testItem) continue;
+    const count = Number.parseInt(row[2], 10);
+    const mean = Number.parseFloat(row[3]);
+    const median = Number.parseFloat(row[4]);
+    const range = Number.parseFloat(row[5]);
+    const ttRatio = Number.parseFloat(row[6]);
+    const min = Number.parseFloat(row[7]);
+    const max = Number.parseFloat(row[8]);
+    const unit = String(row[9] ?? "S").trim() || "S";
+    const testNos = String(row[0] ?? "")
+      .split("|")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    stats.push({
+      testNos,
+      testItem,
+      count: Number.isFinite(count) ? count : 0,
+      mean: Number.isFinite(mean) ? mean : 0,
+      median: Number.isFinite(median) ? median : 0,
+      range: Number.isFinite(range) ? range : 0,
+      ttRatio: Number.isFinite(ttRatio) ? ttRatio : 0,
+      min: Number.isFinite(min) ? min : 0,
+      max: Number.isFinite(max) ? max : 0,
+      unit,
+    });
+  }
+  return stats;
+}
+
+function parseSiteTdRows(rows) {
+  const siteTdMap = new Map();
+  for (let i = 1; i < rows.length; i += 1) {
+    const row = rows[i] ?? [];
+    const tdText = String(row[0] ?? "").trim();
+    const siteText = String(row[1] ?? "").trim();
+    const val = Number.parseFloat(row[2]);
+    const tdMatch = tdText.match(/(\d+)/);
+    const siteMatch = siteText.match(/(\d+)/);
+    if (!tdMatch || !siteMatch || !Number.isFinite(val)) continue;
+    const td = String(Number.parseInt(tdMatch[1], 10));
+    const site = String(Number.parseInt(siteMatch[1], 10));
+    const siteMap = siteTdMap.get(site) ?? new Map();
+    siteMap.set(td, val);
+    siteTdMap.set(site, siteMap);
+  }
+  return siteTdMap;
+}
+
+function calculateStationTotalFromSiteTd(siteTdMap) {
+  if (!siteTdMap || siteTdMap.size === 0) return 0;
+  const tdMax = new Map();
+  for (const tdMap of siteTdMap.values()) {
+    for (const [td, value] of tdMap.entries()) {
+      const current = tdMax.get(td);
+      if (current === undefined || value > current) tdMax.set(td, value);
+    }
+  }
+  return Array.from(tdMax.values()).reduce((acc, n) => acc + n, 0);
+}
+
+function countTouchDown(siteTdMap) {
+  if (!siteTdMap || siteTdMap.size === 0) return 0;
+  const tdSet = new Set();
+  for (const tdMap of siteTdMap.values()) {
+    for (const td of tdMap.keys()) tdSet.add(td);
+  }
+  return tdSet.size;
 }
 
 function syncActiveProductForStation() {
@@ -832,6 +1112,20 @@ function exportXlsx() {
     { key: "Product", getValue: (entry) => entry.product },
     { key: "Source", getValue: () => sourceLabel },
     { key: "Root", getValue: (entry) => entry.station.rootFolderName || APP.rootName || "" },
+    {
+      key: "LOTNO",
+      getValue: (entry) => {
+        const fromRoot = parseRootMeta(entry.station.rootFolderName || "")?.lotNo;
+        return fromRoot || "-";
+      },
+    },
+    {
+      key: "WAFER ID",
+      getValue: (entry) => {
+        const fromRoot = parseRootMeta(entry.station.rootFolderName || "")?.waferId;
+        return fromRoot || "-";
+      },
+    },
     { key: "Station", getValue: (entry) => entry.station.name },
     { key: "TouchDownCount", getValue: (entry) => String(entry.station.touchDownCount) },
     { key: "StationTotalTime(HH:MM:SS)", getValue: (entry) => formatDuration(entry.station.stationTotalTime) },
@@ -945,17 +1239,47 @@ function escapeHtml(text) {
 
 function switchEntryPage(target) {
   const isGuide = target === "guide";
+  const isXlsx = target === "xlsx";
+  APP.entryMode = isGuide ? "guide" : (isXlsx ? "xlsx" : "analysis");
   dom.analysisPage?.classList.toggle("hidden", isGuide);
   dom.guidePage?.classList.toggle("hidden", !isGuide);
 
   if (dom.entryTabAnalysis) {
-    dom.entryTabAnalysis.classList.toggle("is-active", !isGuide);
-    dom.entryTabAnalysis.setAttribute("aria-selected", isGuide ? "false" : "true");
+    const active = !isGuide && !isXlsx;
+    dom.entryTabAnalysis.classList.toggle("is-active", active);
+    dom.entryTabAnalysis.setAttribute("aria-selected", active ? "true" : "false");
+  }
+  if (dom.entryTabXlsx) {
+    dom.entryTabXlsx.classList.toggle("is-active", isXlsx);
+    dom.entryTabXlsx.setAttribute("aria-selected", isXlsx ? "true" : "false");
   }
   if (dom.entryTabGuide) {
     dom.entryTabGuide.classList.toggle("is-active", isGuide);
     dom.entryTabGuide.setAttribute("aria-selected", isGuide ? "true" : "false");
   }
+  applyEntryModeUI();
+}
+
+function applyEntryModeUI() {
+  const isXlsx = APP.entryMode === "xlsx";
+  if (dom.sourceModeGroup) dom.sourceModeGroup.classList.toggle("hidden", isXlsx);
+  if (dom.productInput) {
+    dom.productInput.disabled = isXlsx;
+    dom.productInput.placeholder = isXlsx ? "XLSX 匯入模式由檔案內產品資訊判斷" : "例如：EAG119C";
+  }
+  if (dom.pickBtn) dom.pickBtn.textContent = isXlsx ? "📄 選擇 XLSX 檔案" : "📂 選擇上傳檔案";
+  if (dom.analyzeBtn) dom.analyzeBtn.textContent = isXlsx ? "▶ 載入XLSX分析" : "▶ 開始分析";
+  if (dom.sourceRuleText) {
+    dom.sourceRuleText.innerHTML = isXlsx
+      ? "規則：請選擇由本工具匯出的 <code>.xlsx</code>，可一次匯入多個產品檔案，系統會自動合併成多產品比較分析。"
+      : `規則：先勾選模式再上傳。<code>資料夾匯入</code>會讀取符合
+          <code>產品主目錄/RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/home/winbond/rawdata</code> 的 .TXT（例如：
+          <code>FAG112/RW_CP1_65296Z600_01_S1P1_20260112181636/home/winbond/rawdata</code>）；
+          <code>單選 .TXT 檔案</code>則直接解析你選的單一檔案。`;
+  }
+  if (isXlsx) APP.sourceMode = "xlsx";
+  else if (APP.sourceMode === "xlsx") APP.sourceMode = Array.from(dom.sourceModeRadios).find((r) => r.checked)?.value ?? "folder";
+  updateAnalyzeState();
 }
 
 async function initializeGuidePage() {
