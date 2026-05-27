@@ -15,7 +15,7 @@ const APP = {
   },
 };
 
-const ROOT_REGEX = /^RW_P_([^_]+)_([^_]+)_([^_]+)_(\d{14})$/i;
+const ROOT_REGEX = /^RW_(.+)_([^_]+)_([^_]+)_([^_]+)_(\d{14})$/i;
 const TEST_TIME_REGEX = /<<<\s*Test Time\s*>>>\s*,\s*(\d+)\s*,\s*([^,]+?)\s*,\s*([+-]?\d*\.?\d+)\s*,\s*\(([^)]+)\)/i;
 const TOTAL_TEST_TIME_REGEX = /:(\d+):Total Test Time\s*=\s*([+-]?\d*\.?\d+)\s*\(S\)/i;
 const RAW_TXT_FILENAME_REGEX = /^([^_]+)_Wafer(\d+)_([0-9]{14})_S(\d+)\.txt$/i;
@@ -89,11 +89,11 @@ function parseRootMeta(rootName) {
   const m = rootName.match(ROOT_REGEX);
   if (!m) return null;
   return {
-    lotNo: m[1],
-    waferId: m[2],
-    station: m[3],
-    datetimeRaw: m[4],
-    datetime: `${m[4].slice(0, 4)}-${m[4].slice(4, 6)}-${m[4].slice(6, 8)} ${m[4].slice(8, 10)}:${m[4].slice(10, 12)}:${m[4].slice(12, 14)}`,
+    lotNo: m[2],
+    waferId: m[3],
+    station: m[4],
+    datetimeRaw: m[5],
+    datetime: `${m[5].slice(0, 4)}-${m[5].slice(4, 6)}-${m[5].slice(6, 8)} ${m[5].slice(8, 10)}:${m[5].slice(10, 12)}:${m[5].slice(12, 14)}`,
   };
 }
 
