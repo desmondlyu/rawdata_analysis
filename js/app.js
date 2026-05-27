@@ -164,7 +164,8 @@ function getStationNames() {
   const stationSet = new Set();
   for (const product of getProducts()) {
     for (const stationName of product.stations.keys()) {
-      stationSet.add(stationName);
+      const normalized = String(stationName || "").trim();
+      if (normalized) stationSet.add(normalized);
     }
   }
   return Array.from(stationSet).sort((a, b) => a.localeCompare(b));
@@ -806,7 +807,9 @@ function syncActiveProductForStation() {
 function renderStationTabs(stationNames) {
   if (!dom.stationTabsSection || !dom.stationTabs) return;
   dom.stationTabs.innerHTML = "";
-  for (const name of stationNames) {
+  for (const rawName of stationNames) {
+    const name = String(rawName || "").trim();
+    if (!name) continue;
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "station-tab-btn";
