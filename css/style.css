@@ -18,12 +18,9 @@ body {
 }
 
 .entry-tabs-wrap {
-  border: 1px solid var(--border);
-  border-bottom: none;
-  border-radius: 0.95rem 0.95rem 0 0;
   background: #111b2f;
-  overflow: hidden;
-  margin-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
 }
 
 .entry-tabs {
@@ -32,7 +29,6 @@ body {
   width: 100%;
   overflow-x: auto;
   padding: 0.8rem 0.85rem 0;
-  border-bottom: 1px solid var(--border);
 }
 
 .entry-tab-btn {
