@@ -21,6 +21,14 @@
   </header>
 
   <main class="max-w-[96vw] mx-auto px-4 py-8 space-y-6">
+    <section class="entry-tabs-wrap">
+      <div class="entry-tabs" role="tablist" aria-label="入口功能切換">
+        <button id="entry-tab-analysis" type="button" class="entry-tab-btn is-active" data-entry-tab="analysis" aria-selected="true">資料分析</button>
+        <button id="entry-tab-guide" type="button" class="entry-tab-btn" data-entry-tab="guide" aria-selected="false">操作說明</button>
+      </div>
+    </section>
+
+    <div id="analysis-page" class="entry-page">
     <section class="card p-6">
       <p class="step-label mb-4">步驟零：輸入產品名稱</p>
       <div class="mb-6 grid md:grid-cols-[1fr_auto] gap-4 items-start">
@@ -68,7 +76,7 @@
       </div>
       </div>
 
-      <div id="folder-meta" class="mt-4 grid sm:grid-cols-2 lg:grid-cols-4 gap-3 hidden"></div>
+      <div id="folder-meta" class="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3 hidden"></div>
       <p id="message" class="mt-4 text-sm msg-info"></p>
       <div id="progress-wrap" class="mt-3 hidden">
         <div class="progress-track">
@@ -92,7 +100,13 @@
     <section id="kpi-section" class="kpi-grid hidden"></section>
 
     <section id="chart-section" class="card p-6 hidden">
-      <h2 class="text-xl font-bold mb-4">統計圖表</h2>
+      <div class="chart-toolbar mb-4">
+        <h2 class="text-xl font-bold">統計圖表</h2>
+        <label class="chart-sort-label">
+          依產品排序：
+          <select id="chart-sort-product" class="chart-sort-select"></select>
+        </label>
+      </div>
       <div class="grid lg:grid-cols-2 gap-6">
         <div class="chart-box">
           <canvas id="count-chart" aria-label="Test Item 執行次數圖"></canvas>
@@ -112,6 +126,10 @@
     <section id="table-section" class="card p-0 overflow-hidden hidden">
       <div class="p-6 border-b border-slate-700">
         <h2 class="text-xl font-bold">Test Item 統計表</h2>
+        <div class="mt-3">
+          <p class="hint-text text-xs mb-2">By Product 切換（影響 Test Item 統計表）</p>
+          <div id="table-product-tabs" class="station-tabs" role="tablist" aria-label="Test Item 產品切換"></div>
+        </div>
       </div>
       <div class="overflow-auto">
         <table class="min-w-full stat-table">
@@ -134,7 +152,19 @@
 
     <section id="site-td-section" class="card p-6 hidden">
       <h2 class="text-xl font-bold mb-4">Test Time by Site / Touch Down 分析</h2>
+      <div class="mb-3">
+        <p class="hint-text text-xs mb-2">By Product 切換（影響 Test Time by Site / Touch Down）</p>
+        <div id="site-product-tabs" class="station-tabs" role="tablist" aria-label="Site TD 產品切換"></div>
+      </div>
       <div id="site-td-heatmap" class="heatmap-wrap heatmap-wrap--half"></div>
+    </section>
+    </div>
+
+    <section id="guide-page" class="card p-6 entry-page hidden">
+      <h2 class="text-2xl font-bold mb-4">操作說明</h2>
+      <div id="guide-content" class="guide-content">
+        載入操作說明中...
+      </div>
     </section>
   </main>
   <footer class="px-6 py-6 text-center text-sm text-slate-400">
@@ -143,6 +173,7 @@
 
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="js/siteTdHeatmapReact.js"></script>
   <script src="js/app.js"></script>
 </body>

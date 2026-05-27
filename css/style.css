@@ -17,6 +17,96 @@ body {
   background: linear-gradient(135deg, #1d4ed8 0%, #4338ca 100%);
 }
 
+.entry-tabs-wrap {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.entry-tabs {
+  display: inline-flex;
+  gap: 0.2rem;
+  padding: 0.2rem;
+  border: 1px solid #1e293b;
+  background: #0b1220;
+  border-radius: 0.8rem;
+}
+
+.entry-tab-btn {
+  border: 1px solid transparent;
+  background: transparent;
+  color: #94a3b8;
+  border-radius: 0.65rem;
+  padding: 0.45rem 0.95rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.entry-tab-btn.is-active,
+.entry-tab-btn[aria-selected="true"] {
+  background: #1d4ed8;
+  border-color: #3b82f6;
+  color: #eff6ff;
+}
+
+.guide-content {
+  color: #cbd5e1;
+  line-height: 1.7;
+}
+
+.guide-content h1,
+.guide-content h2,
+.guide-content h3,
+.guide-content h4 {
+  color: #f8fafc;
+  margin-top: 1.3rem;
+  margin-bottom: 0.65rem;
+  font-weight: 800;
+}
+
+.guide-content h1 { font-size: 1.8rem; }
+.guide-content h2 { font-size: 1.35rem; }
+.guide-content h3 { font-size: 1.12rem; }
+
+.guide-content p,
+.guide-content ul,
+.guide-content ol {
+  margin-bottom: 0.7rem;
+}
+
+.guide-content code {
+  background: #0b1220;
+  border: 1px solid #1e293b;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.35rem;
+  color: #bfdbfe;
+}
+
+.guide-content pre {
+  background: #0b1220;
+  border: 1px solid #1e293b;
+  border-radius: 0.65rem;
+  padding: 0.75rem;
+  overflow: auto;
+}
+
+.guide-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0 1rem;
+}
+
+.guide-content th,
+.guide-content td {
+  border: 1px solid #1e293b;
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+}
+
+.guide-content th {
+  background: #0b1220;
+  color: #e2e8f0;
+}
+
 .hero-title-wrap {
   display: inline-flex;
   align-items: center;
@@ -213,6 +303,30 @@ body {
   padding: 0.8rem;
   background: #111827;
   min-height: 330px;
+}
+
+.chart-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.chart-sort-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #cbd5e1;
+  font-size: 0.9rem;
+}
+
+.chart-sort-select {
+  background: #0b1220;
+  border: 1px solid #334155;
+  color: #e2e8f0;
+  border-radius: 0.55rem;
+  padding: 0.35rem 0.55rem;
 }
 
 .stat-table th,
