@@ -73,6 +73,11 @@
 2. 可選 **資料夾匯入**、**單選 .TXT 檔案** 或 **匯入XLSX分析**
 3. 支援 **多個產品別 + 多個測試站點** 同時分析
 
+### 步驟零：可選擇啟用異常明細解析
+
+- 勾選 **解析單顆異常時間** 後，Test Item 統計表會提供 `+` 展開按鈕
+- 可展開查看對應 Max(s) 的單顆異常時間 RAWDATA 行
+
 ### 多產品別與多站點資料夾擺放關係
 
 建議主目錄如下（同一次可放多個產品）：
@@ -113,6 +118,7 @@
 - 總摘要 KPI（TEST SITE 數、發現的 Test Item 數、測試站點時間、Touch Down 數等）
 - Test Item 列表及統計資訊
 - Count / Mean / Range / TT Ratio/站點 四張統計圖（可依指定產品做排序基準）
+- 可選擇展開 `+` 查看單顆異常時間明細（若該 Test Item 有匹配資料）
 
 ### 步驟五：匯入XLSX分析（多產品快速比較）
 
@@ -151,8 +157,13 @@
 | **中位數(s)** | 中位數執行時間 |
 | **TT Ratio/站點** | 該 Test Item 加總時間 / 站點整體時間 |
 | **最小值(s)** | 最小執行時間 |
+| **Min Source (SITE/TD)** | 最小值對應的來源站點與 TD |
 | **最大值(s)** | 最大執行時間 |
+| **Max Source (SITE/TD)** | 最大值對應的來源站點與 TD |
+| **Max Detail RawLine** | 對應 Max(s) 的關鍵 T 行原始字串（若匹配規則） |
 | **級距(s)** | Max - Min |
+
+- 若某個 Test Item 可匹配資料，表格左側會顯示 `+`，點開可查看 `Max Detail RawLine`。
 
 ### 圖表展示
 
@@ -165,7 +176,7 @@
 
 在 Test Item 統計表之後，新增 **Heatmap**：
 
-- Heatmap：列為 DUT（Touch Down）、欄為 SITE，色深代表 Total Test Time（秒）
+- Heatmap：列為 TD（Touch Down）、欄為 SITE，色深代表 Total Test Time（秒）
 - 若同一個 `SITE + TD` 在多個檔案重複出現，取最大值顯示
 
 ---
@@ -178,7 +189,7 @@
 |------|------|
 | **Product** | 使用者輸入的產品名稱 |
 | **Summary** | 橫向彙整每個站點資訊（Product/Source/Root/Station/TouchDownCount/StationTotalTime） |
-| **站點_TestItem_Stats** | 每站一張工作表，含 `TT Ratio/站點` 欄位 |
+| **站點_TestItem_Stats** | 每站一張工作表，含 `TT Ratio/站點`、`Min/Max Source(SITE/TD)`、`Max Detail RawLine` 欄位 |
 | **站點_Site_TouchDown** | 每站一張工作表，列出 TouchDown × Site 時間 |
 
 > 匯出的 XLSX 可再回到「匯入XLSX分析」模式重新匯入，用於跨產品快速比較。

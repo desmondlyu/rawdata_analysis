@@ -8,7 +8,9 @@ const APP = {
   activeStation: "",
   activeProduct: "",
   chartSortProduct: "",
+  enableAnomalyDetail: false,
   tableSort: { key: "mean", dir: "desc" },
+  tableExpanded: new Set(),
   charts: { count: null, mean: null, range: null, ratio: null },
 };
 
@@ -17,6 +19,7 @@ const PRODUCT_ROOT_REGEX = /^(EAG|FAG|AAG|KAG|MAG|RAG)\S*$/i;
 const TEST_TIME_REGEX = /<<<\s*Test Time\s*>>>\s*,\s*(\d+)\s*,\s*([^,]+?)\s*,\s*([+-]?\d*\.?\d+)\s*,\s*\(([^)]+)\)/i;
 const TOTAL_TEST_TIME_REGEX = /:(\d+):Total Test Time\s*=\s*([+-]?\d*\.?\d+)\s*\(S\)/i;
 const RAW_TXT_FILENAME_REGEX = /^([^_]+)_Wafer(\d+)_([0-9]{14})_S(\d+)\.txt$/i;
+const LINE_PREFIX_META_REGEX = /^[^:]+:([^:]+):([^:,]+),([^:]+):([^:]+):/;
 
 const PRODUCT_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#a855f7", "#06b6d4", "#ef4444", "#84cc16", "#f97316"];
 
@@ -29,6 +32,7 @@ const dom = {
   sourceRuleText: document.getElementById("source-rule-text"),
   sourceModeRadios: document.querySelectorAll('input[name="source-mode"]'),
   productInput: document.getElementById("product-input"),
+  anomalyDetailToggle: document.getElementById("anomaly-detail-toggle"),
   folderName: document.getElementById("folder-name"),
   folderMeta: document.getElementById("folder-meta"),
   entryTabAnalysis: document.getElementById("entry-tab-analysis"),
@@ -61,12 +65,14 @@ dom.folderInput.addEventListener("change", handleFolderSelection);
 dom.txtInput.addEventListener("change", handleTxtSelection);
 dom.xlsxInput.addEventListener("change", handleXlsxSelection);
 dom.productInput.addEventListener("input", onProductNameChange);
+dom.anomalyDetailToggle?.addEventListener("change", onAnomalyToggleChange);
 dom.analyzeBtn.addEventListener("click", startAnalysis);
 dom.exportBtn.addEventListener("click", exportXlsx);
 dom.stationTabs?.addEventListener("click", onStationTabClick);
 dom.tableProductTabs?.addEventListener("click", onProductTabClick);
 dom.siteProductTabs?.addEventListener("click", onProductTabClick);
 dom.statsThead?.addEventListener("click", onStatsHeadClick);
+dom.statsTbody?.addEventListener("click", onStatsBodyClick);
 dom.chartSortProduct?.addEventListener("change", onChartSortProductChange);
 dom.entryTabAnalysis?.addEventListener("click", () => switchEntryPage("analysis"));
 dom.entryTabXlsx?.addEventListener("click", () => switchEntryPage("xlsx"));
@@ -105,6 +111,12 @@ function onProductNameChange() {
     renderMeta(buildMetaCards());
     renderKpi();
   }
+}
+
+function onAnomalyToggleChange() {
+  APP.enableAnomalyDetail = Boolean(dom.anomalyDetailToggle?.checked);
+  APP.tableExpanded.clear();
+  if (hasAnalyzedData()) renderTable();
 }
 
 function parseRootMeta(rootName) {
@@ -213,6 +225,7 @@ function resetResultsUI() {
     }
   }
   APP.chartSortProduct = "";
+  APP.tableExpanded.clear();
 
   dom.stationTabsSection?.classList.add("hidden");
   dom.kpiSection.classList.add("hidden");
@@ -484,7 +497,8 @@ async function startAnalysis() {
         const text = await file.text();
         const lines = text.split(/\r?\n/);
 
-        for (const line of lines) {
+        for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+          const line = lines[lineIndex];
           const tdMatch = line.match(TOTAL_TEST_TIME_REGEX);
           if (tdMatch) {
             const td = String(Number.parseInt(tdMatch[1], 10));
@@ -507,10 +521,23 @@ async function startAnalysis() {
           const value = Number.parseFloat(m[3]);
           const unit = m[4].trim();
           if (!Number.isFinite(value)) continue;
+          const lineMeta = parseTestTimeLineMeta(line);
 
           const row = itemMap.get(testItem) ?? { testNos: new Set(), testItem, values: [], unit };
           row.testNos.add(testNo);
-          row.values.push(value);
+          row.values.push({
+            value,
+            site: siteKey,
+            td: lineMeta.td || "Unknown",
+            systemDut: lineMeta.systemDut,
+            x: lineMeta.x,
+            y: lineMeta.y,
+            testNo,
+            testItem,
+            lineIndex,
+            lines,
+            rawLine: line,
+          });
           itemMap.set(testItem, row);
         }
 
@@ -717,20 +744,27 @@ function parseEntryFromSheetName(sheetName) {
 }
 
 function parseStatsRows(rows) {
+  const header = (rows[0] ?? []).map((v) => String(v ?? "").trim());
+  const idxMap = new Map(header.map((name, idx) => [name, idx]));
   const stats = [];
   for (let i = 1; i < rows.length; i += 1) {
     const row = rows[i] ?? [];
-    const testItem = String(row[1] ?? "").trim();
+    const testItem = String(getCellByHeader(row, idxMap, ["Test Item"], 1) ?? "").trim();
     if (!testItem) continue;
-    const count = Number.parseInt(row[2], 10);
-    const mean = Number.parseFloat(row[3]);
-    const median = Number.parseFloat(row[4]);
-    const range = Number.parseFloat(row[5]);
-    const ttRatio = Number.parseFloat(row[6]);
-    const min = Number.parseFloat(row[7]);
-    const max = Number.parseFloat(row[8]);
-    const unit = String(row[9] ?? "S").trim() || "S";
-    const testNos = String(row[0] ?? "")
+    const count = Number.parseInt(getCellByHeader(row, idxMap, ["Count"], 2), 10);
+    const mean = Number.parseFloat(getCellByHeader(row, idxMap, ["Mean(s)"], 3));
+    const median = Number.parseFloat(getCellByHeader(row, idxMap, ["Median(s)"], 4));
+    const range = Number.parseFloat(getCellByHeader(row, idxMap, ["Range(s)"], 5));
+    const ttRatio = Number.parseFloat(getCellByHeader(row, idxMap, ["TT Ratio/站點"], 6));
+    const min = Number.parseFloat(getCellByHeader(row, idxMap, ["Min(s)"], 7));
+    const max = Number.parseFloat(getCellByHeader(row, idxMap, ["Max(s)"], 8));
+    const minSourceText = String(getCellByHeader(row, idxMap, ["Min Source(SITE/TD)"], 9) ?? "");
+    const maxSourceText = String(getCellByHeader(row, idxMap, ["Max Source(SITE/TD)"], 10) ?? "");
+    const maxDetailLine = String(getCellByHeader(row, idxMap, ["Max Detail RawLine"], -1) ?? "").trim();
+    const minSource = parseSourceCell(minSourceText);
+    const maxSource = parseSourceCell(maxSourceText);
+    const unit = String(getCellByHeader(row, idxMap, ["Unit"], 12) ?? "S").trim() || "S";
+    const testNos = String(getCellByHeader(row, idxMap, ["Test Nos"], 0) ?? "")
       .split("|")
       .map((s) => s.trim())
       .filter(Boolean);
@@ -744,6 +778,11 @@ function parseStatsRows(rows) {
       ttRatio: Number.isFinite(ttRatio) ? ttRatio : 0,
       min: Number.isFinite(min) ? min : 0,
       max: Number.isFinite(max) ? max : 0,
+      minSite: minSource.site,
+      minTd: minSource.td,
+      maxSite: maxSource.site,
+      maxTd: maxSource.td,
+      maxDetailLine,
       unit,
     });
   }
@@ -847,6 +886,7 @@ function onStationTabClick(event) {
   const stationName = btn.getAttribute("data-station");
   if (!stationName) return;
   APP.activeStation = stationName;
+  APP.tableExpanded.clear();
   syncActiveProductForStation();
   renderStationTabs(getStationNames().filter((s) => getProductsInStation(s).length > 0));
   renderProductTabs();
@@ -863,6 +903,7 @@ function onProductTabClick(event) {
   const productName = btn.getAttribute("data-product");
   if (!productName) return;
   APP.activeProduct = productName;
+  APP.tableExpanded.clear();
   renderProductTabs();
   renderKpi();
   renderTable();
@@ -872,6 +913,16 @@ function onProductTabClick(event) {
 function onChartSortProductChange() {
   APP.chartSortProduct = dom.chartSortProduct?.value || APP.chartSortProduct;
   renderCharts();
+}
+
+function onStatsBodyClick(event) {
+  const btn = event.target instanceof Element ? event.target.closest("[data-expand-key]") : null;
+  if (!btn) return;
+  const key = btn.getAttribute("data-expand-key");
+  if (!key) return;
+  if (APP.tableExpanded.has(key)) APP.tableExpanded.delete(key);
+  else APP.tableExpanded.add(key);
+  renderTable();
 }
 
 function onStatsHeadClick(event) {
@@ -902,15 +953,22 @@ function renderSortHeaderState() {
 function buildStats(itemMap, stationTotalTime) {
   const results = [];
   for (const payload of itemMap.values()) {
-    const values = payload.values.slice().sort((a, b) => a - b);
-    const count = values.length;
-    const sum = values.reduce((acc, n) => acc + n, 0);
+    const valueRecords = payload.values.filter((entry) => Number.isFinite(entry?.value));
+    const values = valueRecords.map((entry) => entry.value).sort((a, b) => a - b);
+    const count = valueRecords.length;
+    const sum = valueRecords.reduce((acc, entry) => acc + entry.value, 0);
     const mean = sum / count;
     const median = count % 2 === 0 ? (values[count / 2 - 1] + values[count / 2]) / 2 : values[Math.floor(count / 2)];
     const min = values[0];
     const max = values[count - 1];
     const range = max - min;
     const ttRatio = stationTotalTime > 0 ? sum / stationTotalTime : 0;
+    let minRecord = null;
+    let maxRecord = null;
+    for (const entry of valueRecords) {
+      if (!minRecord || entry.value < minRecord.value) minRecord = entry;
+      if (!maxRecord || entry.value > maxRecord.value) maxRecord = entry;
+    }
     results.push({
       testNos: Array.from(payload.testNos).sort((a, b) => Number(a) - Number(b)),
       testItem: payload.testItem,
@@ -922,6 +980,11 @@ function buildStats(itemMap, stationTotalTime) {
       max,
       ttRatio,
       unit: payload.unit,
+      minSite: minRecord?.site || "Unknown",
+      minTd: minRecord?.td || "Unknown",
+      maxSite: maxRecord?.site || "Unknown",
+      maxTd: maxRecord?.td || "Unknown",
+      maxDetailLine: extractMaxDetailRawLine(maxRecord),
     });
   }
   return results.sort((a, b) => (b.mean !== a.mean ? b.mean - a.mean : a.testItem.localeCompare(b.testItem)));
@@ -980,9 +1043,13 @@ function renderTable() {
   }
   const sorted = sortStats(station.stats, APP.tableSort.key, APP.tableSort.dir);
   dom.statsTbody.innerHTML = sorted
-    .map(
-      (s) => `
+    .map((s) => {
+      const rowKey = makeTableExpandKey(station.name, s.testItem);
+      const canExpand = Boolean(s.maxDetailLine);
+      const expanded = APP.tableExpanded.has(rowKey);
+      const baseRow = `
       <tr>
+        <td class="expand-cell">${APP.enableAnomalyDetail && canExpand ? `<button type="button" class="expand-btn" data-expand-key="${escapeHtml(rowKey)}" aria-expanded="${expanded ? "true" : "false"}">${expanded ? "−" : "+"}</button>` : ""}</td>
         <td title="${escapeHtml(s.testItem)}">${escapeHtml(s.testItem)}</td>
         <td>${s.count}</td>
         <td>${fmt(s.mean)}</td>
@@ -990,10 +1057,17 @@ function renderTable() {
         <td>${fmt(s.range)}</td>
         <td>${fmt(s.ttRatio)}</td>
         <td>${fmt(s.min)}</td>
+        <td>${escapeHtml(formatSiteTdSource(s.minSite, s.minTd))}</td>
         <td>${fmt(s.max)}</td>
-      </tr>
-    `,
-    )
+        <td>${escapeHtml(formatSiteTdSource(s.maxSite, s.maxTd))}</td>
+      </tr>`;
+      if (!(APP.enableAnomalyDetail && canExpand && expanded)) return baseRow;
+      return `${baseRow}
+      <tr class="detail-row">
+        <td></td>
+        <td colspan="10" class="detail-cell"><code>${escapeHtml(s.maxDetailLine)}</code></td>
+      </tr>`;
+    })
     .join("");
   renderSortHeaderState();
   dom.tableSection.classList.remove("hidden");
@@ -1141,9 +1215,37 @@ function exportXlsx() {
   appendSheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), "Summary", usedSheetNames);
 
   for (const entry of entries) {
-    const itemRows = [["Test Nos", "Test Item", "Count", "Mean(s)", "Median(s)", "Range(s)", "TT Ratio/站點", "Min(s)", "Max(s)", "Unit"]];
+    const itemRows = [[
+      "Test Nos",
+      "Test Item",
+      "Count",
+      "Mean(s)",
+      "Median(s)",
+      "Range(s)",
+      "TT Ratio/站點",
+      "Min(s)",
+      "Min Source(SITE/TD)",
+      "Max(s)",
+      "Max Source(SITE/TD)",
+      "Max Detail RawLine",
+      "Unit",
+    ]];
     for (const s of entry.station.stats) {
-      itemRows.push([s.testNos.join("|"), s.testItem, String(s.count), fmt(s.mean), fmt(s.median), fmt(s.range), fmt(s.ttRatio), fmt(s.min), fmt(s.max), s.unit || "S"]);
+      itemRows.push([
+        s.testNos.join("|"),
+        s.testItem,
+        String(s.count),
+        fmt(s.mean),
+        fmt(s.median),
+        fmt(s.range),
+        fmt(s.ttRatio),
+        fmt(s.min),
+        formatSiteTdSource(s.minSite, s.minTd),
+        fmt(s.max),
+        formatSiteTdSource(s.maxSite, s.maxTd),
+        s.maxDetailLine || "",
+        s.unit || "S",
+      ]);
     }
     appendSheet(wb, XLSX.utils.aoa_to_sheet(itemRows), `${entry.product}_${entry.station.name}_TestItem_Stats`, usedSheetNames);
 
@@ -1226,6 +1328,111 @@ function parseRawTxtFilename(filename) {
   return { lotNo: m[1], waferNo: Number.parseInt(m[2], 10), datetimeRaw: m[3], site: Number.parseInt(m[4], 10) };
 }
 
+function parseTestTimeLineMeta(line) {
+  const m = String(line || "").match(LINE_PREFIX_META_REGEX);
+  if (!m) return { systemDut: "", x: "", y: "", td: "" };
+  const rawTd = String(m[4] || "").trim();
+  const tdNum = Number.parseInt(rawTd, 10);
+  return {
+    systemDut: String(m[1] || "").trim(),
+    x: String(m[2] || "").trim(),
+    y: String(m[3] || "").trim(),
+    td: Number.isFinite(tdNum) ? String(tdNum) : rawTd,
+  };
+}
+
+function makeTableExpandKey(stationName, testItem) {
+  return `${String(stationName || "").trim()}||${String(testItem || "").trim()}`;
+}
+
+function extractMaxDetailRawLine(maxRecord) {
+  if (!maxRecord || !Array.isArray(maxRecord.lines)) return "";
+  const lines = maxRecord.lines;
+  const endIndex = Number.isInteger(maxRecord.lineIndex) ? maxRecord.lineIndex : -1;
+  if (endIndex < 0 || endIndex >= lines.length) return "";
+  const td = String(maxRecord.td || "").trim();
+  const testNo = String(maxRecord.testNo || "").trim();
+  const testItem = String(maxRecord.testItem || "").trim();
+  if (!td || !testNo || !testItem) return "";
+
+  const headerIndex = findTestItemHeaderLine(lines, endIndex, td, testNo, testItem);
+  if (headerIndex < 0) return "";
+  const detail = findMaxTimingLineBetween(lines, headerIndex + 1, endIndex - 1, td);
+  return detail?.rawLine || "";
+}
+
+function findTestItemHeaderLine(lines, fromIndex, td, testNo, testItem) {
+  const escapedItem = escapeRegExp(testItem);
+  const escapedNo = escapeRegExp(testNo);
+  const testRefRegex = new RegExp(`\\b${escapedNo}\\s*,\\s*${escapedItem}\\b`);
+  for (let i = fromIndex - 1; i >= 0; i -= 1) {
+    const line = String(lines[i] || "");
+    if (!line.includes("////")) continue;
+    const meta = parseTestTimeLineMeta(line);
+    if (String(meta.td || "").trim() !== td) continue;
+    if (testRefRegex.test(line)) return i;
+  }
+  return -1;
+}
+
+function findMaxTimingLineBetween(lines, startIdx, endIdx, td) {
+  const regex = /(?:^|[;,\s])(T|Terase|Tpgm|Twc|Tbusy|Twp)\s*=\s*([+-]?\d*\.?\d+)\s*(ms|s)\b/ig;
+  let best = null;
+  for (let i = Math.max(0, startIdx); i <= endIdx && i < lines.length; i += 1) {
+    const line = String(lines[i] || "");
+    if (!line.startsWith("T:")) continue;
+    const meta = parseTestTimeLineMeta(line);
+    if (String(meta.td || "").trim() !== td) continue;
+
+    let localBestSec = null;
+    let m = regex.exec(line);
+    while (m) {
+      const rawValue = Number.parseFloat(m[2]);
+      const unit = String(m[3] || "").toLowerCase();
+      if (Number.isFinite(rawValue)) {
+        const sec = unit === "ms" ? rawValue / 1000 : rawValue;
+        if (localBestSec === null || sec > localBestSec) localBestSec = sec;
+      }
+      m = regex.exec(line);
+    }
+    regex.lastIndex = 0;
+    if (localBestSec === null) continue;
+    if (!best || localBestSec > best.valueSec) {
+      best = { valueSec: localBestSec, rawLine: line.trim() };
+    }
+  }
+  return best;
+}
+
+function formatSiteTdSource(site, td) {
+  const siteLabel = site && site !== "Unknown" ? String(site) : "?";
+  const tdLabel = td && td !== "Unknown" ? String(td) : "?";
+  return `SITE ${siteLabel} / TD ${tdLabel}`;
+}
+
+function parseSourceCell(text) {
+  const raw = String(text || "").trim();
+  const siteMatch = raw.match(/SITE\s*([^\s/]+)/i);
+  const tdMatch = raw.match(/TD\s*([^\s/]+)/i);
+  return {
+    site: siteMatch ? siteMatch[1] : "Unknown",
+    td: tdMatch ? tdMatch[1] : "Unknown",
+  };
+}
+
+function getCellByHeader(row, idxMap, aliases, fallbackIndex) {
+  for (const alias of aliases) {
+    if (!idxMap.has(alias)) continue;
+    const idx = idxMap.get(alias);
+    return row[idx];
+  }
+  return row[fallbackIndex];
+}
+
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function formatValueList(values) {
   if (!values || values.length === 0) return "-";
   return values.join(", ");
@@ -1275,10 +1482,9 @@ function applyEntryModeUI() {
   if (dom.sourceRuleText) {
     dom.sourceRuleText.innerHTML = isXlsx
       ? "規則：請選擇由本工具匯出的 <code>.xlsx</code>，可一次匯入多個產品檔案，系統會自動合併成多產品比較分析。"
-      : `規則：先勾選模式再上傳。<code>資料夾匯入</code>會讀取符合
-          <code>產品主目錄/RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/home/winbond/rawdata</code> 的 .TXT（例如：
-          <code>FAG112/RW_CP1_65296Z600_01_S1P1_20260112181636/home/winbond/rawdata</code>）；
-          <code>單選 .TXT 檔案</code>則直接解析你選的單一檔案。`;
+      : `規則：先勾選模式再上傳。<br>
+          - <code>資料夾匯入</code>：會讀取符合 <code>產品主目錄/RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/home/winbond/rawdata</code> 的 .TXT（例如：<code>FAG112/RW_CP1_65296Z600_01_S1P1_20260112181636/home/winbond/rawdata</code>）<br>
+          - <code>單選 .TXT 檔案</code>：直接解析你選的單一檔案`;
   }
   if (isXlsx) APP.sourceMode = "xlsx";
   else if (APP.sourceMode === "xlsx") APP.sourceMode = Array.from(dom.sourceModeRadios).find((r) => r.checked)?.value ?? "folder";

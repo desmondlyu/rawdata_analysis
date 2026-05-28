@@ -92,7 +92,7 @@
         e(
           "tr",
           null,
-          e("th", null, "DUT \\ SITE"),
+          e("th", null, "TD \\ SITE"),
           siteEntries.map(function renderSiteHeader(entry) {
             return e("th", { key: "th-site-" + entry.site }, formatSiteLabel(entry.site));
           }),
@@ -105,12 +105,12 @@
           return e(
             "tr",
             { key: "row-td-" + td },
-            e("td", { className: "heatmap-site-label" }, formatDutLabel(td)),
+            e("td", { className: "heatmap-site-label" }, formatTdLabel(td)),
             siteEntries.map(function renderCell(entry) {
               const site = entry.site;
               const value = matrix[entry.siteIndex][tdIndex];
               const style = { background: getHeatColor(value, maxValue) };
-              const title = "DUT " + formatDutLabel(td) + ", SITE " + formatSiteLabel(site) + ": " + value.toFixed(3) + " s";
+              const title = "TD " + formatTdLabel(td) + ", SITE " + formatSiteLabel(site) + ": " + value.toFixed(3) + " s";
               return e(
                 "td",
                 { key: "cell-td-" + td + "-site-" + site, className: "heat-cell", style: style, title: title },
@@ -205,9 +205,9 @@
     return Number.isFinite(n) ? String(n) : String(site);
   }
 
-  function formatDutLabel(td) {
+  function formatTdLabel(td) {
     const n = Number(td);
-    return Number.isFinite(n) ? "D" + String(n) : "D" + String(td);
+    return Number.isFinite(n) ? String(n) : String(td);
   }
 
   function render(container, siteTdMap) {

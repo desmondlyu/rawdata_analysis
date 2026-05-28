@@ -37,6 +37,10 @@
         <div>
           <label for="product-input" class="block text-sm mb-2 hint-text">產品名稱（顯示於 Dashboard 與 XLSX）</label>
           <input id="product-input" type="text" class="input-field w-full md:w-96" placeholder="例如：EAG119C">
+          <label class="source-mode-option mt-3 inline-flex">
+            <input id="anomaly-detail-toggle" type="checkbox">
+            <span>解析單顆異常時間</span>
+          </label>
         </div>
         <div class="rounded-xl p-4 folder-summary md:min-w-[380px]">
           <p class="text-xs mb-1 folder-summary-label">目前來源</p>
@@ -71,10 +75,9 @@
           📂 選擇上傳檔案
         </button>
         <p id="source-rule-text" class="text-sm mt-3 hint-text">
-          規則：先勾選模式再上傳。<code>資料夾匯入</code>會讀取符合
-          <code>產品主目錄/RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/home/winbond/rawdata</code> 的 .TXT（例如：
-          <code>FAG112/RW_CP1_65296Z600_01_S1P1_20260112181636/home/winbond/rawdata</code>）；
-          <code>單選 .TXT 檔案</code>則直接解析你選的單一檔案。
+          規則：先勾選模式再上傳。<br>
+          - <code>資料夾匯入</code>：會讀取符合 <code>產品主目錄/RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/home/winbond/rawdata</code> 的 .TXT（例如：<code>FAG112/RW_CP1_65296Z600_01_S1P1_20260112181636/home/winbond/rawdata</code>）<br>
+          - <code>單選 .TXT 檔案</code>：直接解析你選的單一檔案
         </p>
       </div>
       </div>
@@ -137,6 +140,7 @@
         <table class="min-w-full stat-table">
           <thead id="stats-thead">
             <tr>
+              <th></th>
               <th><button type="button" class="sort-btn" data-sort-key="testItem">Test Item</button></th>
               <th><button type="button" class="sort-btn" data-sort-key="count">Count</button></th>
               <th><button type="button" class="sort-btn" data-sort-key="mean">Mean (s)</button></th>
@@ -144,7 +148,9 @@
               <th><button type="button" class="sort-btn" data-sort-key="range">Range (s)</button></th>
               <th><button type="button" class="sort-btn" data-sort-key="ttRatio">TT Ratio/站點</button></th>
               <th><button type="button" class="sort-btn" data-sort-key="min">Min (s)</button></th>
+              <th>Min Source (SITE/TD)</th>
               <th><button type="button" class="sort-btn" data-sort-key="max">Max (s)</button></th>
+              <th>Max Source (SITE/TD)</th>
             </tr>
           </thead>
           <tbody id="stats-tbody"></tbody>
