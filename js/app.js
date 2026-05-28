@@ -920,7 +920,11 @@ function parseStatsRows(rows) {
     const mean = Number.parseFloat(getCellByHeader(row, idxMap, ["Mean(s)"], 3));
     const median = Number.parseFloat(getCellByHeader(row, idxMap, ["Median(s)"], 4));
     const range = Number.parseFloat(getCellByHeader(row, idxMap, ["Range(s)"], 5));
-    const ttRatio = Number.parseFloat(getCellByHeader(row, idxMap, ["TT Ratio/站點"], 6));
+    const ttRatioRaw = Number.parseFloat(getCellByHeader(row, idxMap, ["TT Ratio/站點(%)", "TT Ratio/站點 (%)", "TT Ratio/站點"], 6));
+    const ratioHeader = idxMap.has("TT Ratio/站點(%)")
+      ? "TT Ratio/站點(%)"
+      : (idxMap.has("TT Ratio/站點 (%)") ? "TT Ratio/站點 (%)" : "TT Ratio/站點");
+    const ttRatio = normalizeTtRatioValue(ttRatioRaw, ratioHeader);
     const min = Number.parseFloat(getCellByHeader(row, idxMap, ["Min(s)"], 7));
     const max = Number.parseFloat(getCellByHeader(row, idxMap, ["Max(s)"], 8));
     const minSourceText = String(getCellByHeader(row, idxMap, ["Min Source(SITE/TD)"], 9) ?? "");
@@ -1127,7 +1131,7 @@ function buildStats(itemMap, stationTotalTime) {
     const min = values[0];
     const max = values[count - 1];
     const range = max - min;
-    const ttRatio = stationTotalTime > 0 ? sum / stationTotalTime : 0;
+    const ttRatio = stationTotalTime > 0 ? (sum / stationTotalTime) * 100 : 0;
     let minRecord = null;
     let maxRecord = null;
     for (const entry of valueRecords) {
@@ -1317,7 +1321,7 @@ function renderCharts() {
   APP.charts.count = renderMetricChart("count-chart", "count", "Count", "#3b82f6");
   APP.charts.mean = renderMetricChart("mean-chart", "mean", "Mean (s)", "#10b981");
   APP.charts.range = renderMetricChart("range-chart", "range", "Range (s)", "#f59e0b");
-  APP.charts.ratio = renderMetricChart("tt-ratio-chart", "ttRatio", "TT Ratio/站點", "#a855f7");
+  APP.charts.ratio = renderMetricChart("tt-ratio-chart", "ttRatio", "TT Ratio/站點 (%)", "#a855f7");
   dom.chartSection.classList.remove("hidden");
 }
 
@@ -1387,7 +1391,7 @@ function exportXlsx() {
       "Mean(s)",
       "Median(s)",
       "Range(s)",
-      "TT Ratio/站點",
+      "TT Ratio/站點(%)",
       "Min(s)",
       "Min Source(SITE/TD)",
       "Max(s)",
@@ -1583,6 +1587,13 @@ function parseSourceCell(text) {
     site: siteMatch ? siteMatch[1] : "Unknown",
     td: tdMatch ? tdMatch[1] : "Unknown",
   };
+}
+
+function normalizeTtRatioValue(value, headerName) {
+  if (!Number.isFinite(value)) return 0;
+  const header = String(headerName || "").toLowerCase();
+  const isPercentHeader = header.includes("(%)") || header.includes("%");
+  return isPercentHeader ? value : value * 100;
 }
 
 function getCellByHeader(row, idxMap, aliases, fallbackIndex) {

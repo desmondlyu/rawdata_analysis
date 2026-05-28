@@ -61,7 +61,7 @@
 | **執行次數** (Count) | 該項目被執行的次數 | 記錄數量 |
 | **最小值** (Min) | 最小執行時間 | 最小數值 |
 | **最大值** (Max) | 最大執行時間 | 最大數值 |
-| **TT Ratio/站點** | 該 Test Item 總時間占站點總時間比例 | `sum(Test Item Time) / StationTotalTime` |
+| **TT Ratio/站點 (%)** | 該 Test Item 總時間占站點總時間比例（百分比） | `sum(Test Item Time) / StationTotalTime * 100%` |
 
 ---
 
@@ -120,7 +120,7 @@
 - 產品分頁（Tab）切換不同產品的統計表與 Site/TD 分析
 - 總摘要 KPI（TEST SITE 數、發現的 Test Item 數、測試站點時間、Touch Down 數等）
 - Test Item 列表及統計資訊
-- Count / Mean / Range / TT Ratio/站點 四張統計圖（可依指定產品做排序基準）
+- Count / Mean / Range / TT Ratio/站點(%) 四張統計圖（可依指定產品做排序基準）
 - 可選擇展開 `+` 查看單顆異常時間明細（若該 Test Item 有匹配資料）
 
 ### 步驟五：匯入XLSX分析（多產品快速比較）
@@ -158,7 +158,7 @@
 | **執行次數** | 該項目在所有檔案中被執行的次數 |
 | **平均時間(s)** | 平均執行時間 |
 | **中位數(s)** | 中位數執行時間 |
-| **TT Ratio/站點** | 該 Test Item 加總時間 / 站點整體時間 |
+| **TT Ratio/站點 (%)** | 該 Test Item 加總時間 / 站點整體時間（百分比） |
 | **最小值(s)** | 最小執行時間 |
 | **Min Source (SITE/TD)** | 最小值對應的來源站點與 TD |
 | **最大值(s)** | 最大執行時間 |
@@ -173,7 +173,7 @@
 1. **Test Item 執行次數分布** — 柱狀圖
 2. **Test Item 平均時間分布** — 柱狀圖
 3. **Test Item Range 分布** — 柱狀圖
-4. **Test Item TT Ratio/站點 分布** — 柱狀圖
+4. **Test Item TT Ratio/站點(%) 分布** — 柱狀圖
 
 ### Test Time by Site / Touch Down 分析
 
@@ -192,7 +192,7 @@
 |------|------|
 | **Product** | 使用者輸入的產品名稱 |
 | **Summary** | 橫向彙整每個站點資訊（Product/Source/Root/Station/TouchDownCount/StationTotalTime） |
-| **站點_TestItem_Stats** | 每站一張工作表，含 `TT Ratio/站點`、`Min/Max Source(SITE/TD)`、`Max Detail RawLine` 欄位 |
+| **站點_TestItem_Stats** | 每站一張工作表，含 `TT Ratio/站點(%)`、`Min/Max Source(SITE/TD)`、`Max Detail RawLine` 欄位 |
 | **站點_Site_TouchDown** | 每站一張工作表，列出 TouchDown × Site 時間 |
 
 > 匯出的 XLSX 可再回到「匯入XLSX分析」模式重新匯入，用於跨產品快速比較。
