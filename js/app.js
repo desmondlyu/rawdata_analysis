@@ -344,16 +344,21 @@ function handleFolderSelection(event) {
     APP.manualProductName = dom.productInput.value.trim();
   }
 
+  let totalTxt = 0;
+  let acceptedTxt = 0;
   for (const file of APP.files) {
     const rel = String(file.webkitRelativePath || "");
     if (!rel.toLowerCase().endsWith(".txt")) continue;
+    totalTxt += 1;
     const parsed = parseImportPath(rel);
     if (!parsed) continue;
+    if (!parsed.productName) continue;
 
-    const productName = parsed.productName || APP.manualProductName || "UNSPECIFIED";
+    const productName = parsed.productName;
     const product = ensureProduct(productName);
     const station = ensureStation(product, parsed.stationName, parsed.stationFolder, parsed.stationMeta);
     station.rawTxtFiles.push(file);
+    acceptedTxt += 1;
 
     if (parsed.stationMeta) {
       product.lotNos.add(parsed.stationMeta.lotNo);
@@ -371,9 +376,11 @@ function handleFolderSelection(event) {
 
   const txtCount = getTotalRawTxtCount();
   if (!txtCount) {
-    showMessage("未在任一產品/站點子目錄的 home/winbond/rawdata 下找到 .TXT 檔案。", "error");
+    showMessage("未找到符合產品目錄（FAG/EAG/MAG/AAG/KAG/RAG）且位於 home/winbond/rawdata 的 .TXT 檔案。", "error");
   } else {
-    showMessage(`已找到 ${getProducts().length} 個產品、${stationNames.length} 個站點、共 ${txtCount} 個 .TXT 檔案。`, "success");
+    const skipped = Math.max(0, totalTxt - acceptedTxt);
+    const skippedText = skipped > 0 ? `，略過 ${skipped} 個非產品目錄 .TXT` : "";
+    showMessage(`已找到 ${getProducts().length} 個產品、${stationNames.length} 個站點、共 ${txtCount} 個 .TXT 檔案${skippedText}。`, "success");
   }
   updateAnalyzeState();
 }
@@ -1484,7 +1491,8 @@ function applyEntryModeUI() {
       ? "規則：請選擇由本工具匯出的 <code>.xlsx</code>，可一次匯入多個產品檔案，系統會自動合併成多產品比較分析。"
       : `規則：先勾選模式再上傳。<br>
           - <code>資料夾匯入</code>：會讀取符合 <code>產品主目錄/RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/home/winbond/rawdata</code> 的 .TXT（例如：<code>FAG112/RW_CP1_65296Z600_01_S1P1_20260112181636/home/winbond/rawdata</code>）<br>
-          - <code>單選 .TXT 檔案</code>：直接解析你選的單一檔案`;
+          - <code>單選 .TXT 檔案</code>：直接解析你選的單一檔案<br>
+          ※ 僅分析產品目錄開頭為 <code>FAG/EAG/MAG/AAG/KAG/RAG</code> 的資料夾，其餘會略過`;
   }
   if (isXlsx) APP.sourceMode = "xlsx";
   else if (APP.sourceMode === "xlsx") APP.sourceMode = Array.from(dom.sourceModeRadios).find((r) => r.checked)?.value ?? "folder";
