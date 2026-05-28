@@ -418,7 +418,7 @@ function parseImportPath(relativePath) {
   const homeIndex = parts.findIndex(
     (part, idx) =>
       part.toLowerCase() === "home" &&
-      (parts[idx + 1] || "").toLowerCase() === "winbond" &&
+      Boolean(parts[idx + 1]) &&
       (parts[idx + 2] || "").toLowerCase() === "rawdata",
   );
   if (homeIndex < 1) return null;
@@ -521,7 +521,7 @@ function handleFolderSelection(event) {
 
   const txtCount = getTotalRawTxtCount();
   if (!txtCount) {
-    showMessage("未找到符合產品目錄（FAG/EAG/MAG/AAG/KAG/RAG）且位於 home/winbond/rawdata 的 .TXT 檔案。", "error");
+    showMessage("未找到符合產品目錄（FAG/EAG/MAG/AAG/KAG/RAG）且位於 home/*/rawdata 的 .TXT 檔案。", "error");
   } else {
     const skipped = Math.max(0, totalTxt - acceptedTxt);
     const skippedText = skipped > 0 ? `，略過 ${skipped} 個非產品目錄 .TXT` : "";
@@ -1352,7 +1352,7 @@ function exportXlsx() {
       if (station.stats.length > 0) entries.push({ product: product.name, station });
     }
   }
-  const sourceLabel = APP.sourceMode === "txt" ? "Direct TXT Upload" : "Folder home/winbond/rawdata";
+  const sourceLabel = APP.sourceMode === "txt" ? "Direct TXT Upload" : "Folder home/*/rawdata";
   const summaryRows = [["Field", ...entries.map((e) => `${e.product}_${e.station.name}`)]];
   const summaryFields = [
     { key: "Product", getValue: (entry) => entry.product },
@@ -1659,7 +1659,7 @@ function applyEntryModeUI() {
     dom.sourceRuleText.innerHTML = isXlsx
       ? "規則：請選擇由本工具匯出的 <code>.xlsx</code>，可一次匯入多個產品檔案，系統會自動合併成多產品比較分析。"
       : `規則：先勾選模式再上傳。<br>
-          - <code>資料夾匯入</code>：會讀取符合 <code>產品主目錄/RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/home/winbond/rawdata</code> 的 .TXT（例如：<code>FAG112/RW_CP1_65296Z600_01_S1P1_20260112181636/home/winbond/rawdata</code>）<br>
+          - <code>資料夾匯入</code>：會讀取符合 <code>產品主目錄/RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/home/*/rawdata</code> 的 .TXT（例如：<code>FAG112/RW_CP1_65296Z600_01_S1P1_20260112181636/home/winbond/rawdata</code>）<br>
           - <code>單選 .TXT 檔案</code>：直接解析你選的單一檔案<br>
           ※ 僅分析產品目錄開頭為 <code>FAG/EAG/MAG/AAG/KAG/RAG</code> 的資料夾，其餘會略過<br>
           ※ 掃描後可於「解析範圍勾選」選擇要分析的產品/站點`;

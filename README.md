@@ -27,12 +27,12 @@
 產品名稱
 ├─ RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS
 │  └─ home
-│     └─ winbond
+│     └─ *
 │        └─ rawdata
 │           └─ *.TXT
 ├─ RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS
 │  └─ home
-│     └─ winbond
+│     └─ *
 │        └─ rawdata
 │           └─ *.TXT
 └─ ...
@@ -87,17 +87,17 @@
 ```
 主目錄
 ├─ FAG112
-│  ├─ RW_*_LOTNO_WAFERID_S1P1_YYYYMMDDHHMMSS\home\winbond\rawdata\*.txt
-│  └─ RW_*_LOTNO_WAFERID_DS05_YYYYMMDDHHMMSS\home\winbond\rawdata\*.txt
+│  ├─ RW_*_LOTNO_WAFERID_S1P1_YYYYMMDDHHMMSS\home\*\rawdata\*.txt
+│  └─ RW_*_LOTNO_WAFERID_DS05_YYYYMMDDHHMMSS\home\*\rawdata\*.txt
 ├─ EAG301
-│  ├─ RW_*_LOTNO_WAFERID_SPRE_YYYYMMDDHHMMSS\home\winbond\rawdata\*.txt
-│  └─ RW_*_LOTNO_WAFERID_DS00_YYYYMMDDHHMMSS\home\winbond\rawdata\*.txt
+│  ├─ RW_*_LOTNO_WAFERID_SPRE_YYYYMMDDHHMMSS\home\*\rawdata\*.txt
+│  └─ RW_*_LOTNO_WAFERID_DS00_YYYYMMDDHHMMSS\home\*\rawdata\*.txt
 └─ ...
 ```
 
 - 第一層：產品別（如 `FAG112`, `EAG301`）
 - 第二層：站點資料夾（依 `RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS` 命名）
-- 第三層固定：`home\winbond\rawdata\*.txt`
+- 第三層固定：`home\*\rawdata\*.txt`（`*` 為任意字串）
 
 ### 步驟二：自動掃描 .TXT 檔案
 
@@ -212,7 +212,7 @@
 ## ❓ 常見問題
 
 **Q：為什麼找不到 .TXT 檔案？**  
-A：請確認資料夾路徑包含 `home\winbond\rawdata\` 子目錄，系統會自動導航至該路徑。
+A：請確認資料夾路徑包含 `home\*\rawdata\` 子目錄（`*` 為任意字串），系統會自動導航至該路徑。
 
 **Q：特徵字串沒有被找到是什麼原因？**  
 A：檢查 .TXT 檔案內容是否包含 `*<<< Test Time >>>,*(S)` 格式的整行字串。可能原因：
