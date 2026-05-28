@@ -79,11 +79,26 @@
           - <code>資料夾匯入</code>：會讀取符合 <code>產品主目錄/RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/home/winbond/rawdata</code> 的 .TXT（例如：<code>FAG112/RW_CP1_65296Z600_01_S1P1_20260112181636/home/winbond/rawdata</code>）<br>
           - <code>單選 .TXT 檔案</code>：直接解析你選的單一檔案
           <br>※ 僅分析產品目錄開頭為 <code>FAG/EAG/MAG/AAG/KAG/RAG</code> 的資料夾，其餘會略過
+          <br>※ 掃描後可於「解析範圍勾選」選擇要分析的產品/站點
         </p>
       </div>
       </div>
 
       <div id="folder-meta" class="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3 hidden"></div>
+      <section id="scope-select-panel" class="mt-4 card p-4 hidden">
+        <div class="scope-select-head">
+          <div>
+            <h3 class="text-base font-bold">解析範圍勾選</h3>
+            <p class="hint-text text-sm">可勾選要分析的產品與站點（不需搬移資料夾）</p>
+          </div>
+          <div class="scope-select-actions">
+            <button id="scope-select-all" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold">全選</button>
+            <button id="scope-select-none" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold">全不選</button>
+          </div>
+        </div>
+        <p id="scope-select-summary" class="hint-text text-sm mt-2"></p>
+        <div id="scope-select-list" class="scope-select-list mt-3"></div>
+      </section>
       <p id="message" class="mt-4 text-sm msg-info"></p>
       <div id="progress-wrap" class="mt-3 hidden">
         <div class="progress-track">

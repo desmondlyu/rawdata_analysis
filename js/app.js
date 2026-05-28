@@ -11,6 +11,7 @@ const APP = {
   enableAnomalyDetail: false,
   tableSort: { key: "mean", dir: "desc" },
   tableExpanded: new Set(),
+  selectedScopes: new Set(),
   charts: { count: null, mean: null, range: null, ratio: null },
 };
 
@@ -35,6 +36,11 @@ const dom = {
   anomalyDetailToggle: document.getElementById("anomaly-detail-toggle"),
   folderName: document.getElementById("folder-name"),
   folderMeta: document.getElementById("folder-meta"),
+  scopeSelectPanel: document.getElementById("scope-select-panel"),
+  scopeSelectSummary: document.getElementById("scope-select-summary"),
+  scopeSelectList: document.getElementById("scope-select-list"),
+  scopeSelectAll: document.getElementById("scope-select-all"),
+  scopeSelectNone: document.getElementById("scope-select-none"),
   entryTabAnalysis: document.getElementById("entry-tab-analysis"),
   entryTabXlsx: document.getElementById("entry-tab-xlsx"),
   entryTabGuide: document.getElementById("entry-tab-guide"),
@@ -77,6 +83,9 @@ dom.chartSortProduct?.addEventListener("change", onChartSortProductChange);
 dom.entryTabAnalysis?.addEventListener("click", () => switchEntryPage("analysis"));
 dom.entryTabXlsx?.addEventListener("click", () => switchEntryPage("xlsx"));
 dom.entryTabGuide?.addEventListener("click", () => switchEntryPage("guide"));
+dom.scopeSelectList?.addEventListener("change", onScopeSelectionChange);
+dom.scopeSelectAll?.addEventListener("click", () => toggleAllScopes(true));
+dom.scopeSelectNone?.addEventListener("click", () => toggleAllScopes(false));
 
 initializeGuidePage();
 applyEntryModeUI();
@@ -206,6 +215,138 @@ function getTotalRawTxtCount() {
   return total;
 }
 
+function makeScopeKey(productName, stationName) {
+  return `${String(productName || "").trim()}||${String(stationName || "").trim()}`;
+}
+
+function initializeScopeSelection() {
+  APP.selectedScopes.clear();
+  for (const product of getProducts()) {
+    for (const station of product.stations.values()) {
+      APP.selectedScopes.add(makeScopeKey(product.name, station.name));
+    }
+  }
+}
+
+function getSelectableStationEntries() {
+  const entries = [];
+  for (const product of getProducts()) {
+    for (const station of product.stations.values()) {
+      if (!station.rawTxtFiles.length) continue;
+      entries.push({ product, station, key: makeScopeKey(product.name, station.name) });
+    }
+  }
+  return entries;
+}
+
+function getSelectedStationEntries() {
+  return getSelectableStationEntries().filter((entry) => APP.selectedScopes.has(entry.key));
+}
+
+function getSelectedRawTxtCount() {
+  return getSelectedStationEntries().reduce((acc, entry) => acc + entry.station.rawTxtFiles.length, 0);
+}
+
+function isProductFullySelected(productName) {
+  const entries = getSelectableStationEntries().filter((entry) => entry.product.name === productName);
+  if (!entries.length) return false;
+  return entries.every((entry) => APP.selectedScopes.has(entry.key));
+}
+
+function isProductPartiallySelected(productName) {
+  const entries = getSelectableStationEntries().filter((entry) => entry.product.name === productName);
+  if (!entries.length) return false;
+  const selectedCount = entries.filter((entry) => APP.selectedScopes.has(entry.key)).length;
+  return selectedCount > 0 && selectedCount < entries.length;
+}
+
+function setProductScopeSelection(productName, checked) {
+  for (const entry of getSelectableStationEntries()) {
+    if (entry.product.name !== productName) continue;
+    if (checked) APP.selectedScopes.add(entry.key);
+    else APP.selectedScopes.delete(entry.key);
+  }
+}
+
+function renderScopeSelection() {
+  if (!dom.scopeSelectPanel || !dom.scopeSelectList || !dom.scopeSelectSummary) return;
+  const show = APP.sourceMode === "folder" && getSelectableStationEntries().length > 0;
+  dom.scopeSelectPanel.classList.toggle("hidden", !show);
+  if (!show) return;
+
+  const byProduct = new Map();
+  for (const entry of getSelectableStationEntries()) {
+    const arr = byProduct.get(entry.product.name) ?? [];
+    arr.push(entry);
+    byProduct.set(entry.product.name, arr);
+  }
+
+  const blocks = [];
+  const productNames = Array.from(byProduct.keys()).sort((a, b) => a.localeCompare(b));
+  for (const productName of productNames) {
+    const entries = byProduct.get(productName) ?? [];
+    const stationChecks = entries
+      .sort((a, b) => a.station.name.localeCompare(b.station.name))
+      .map((entry) => {
+        const checked = APP.selectedScopes.has(entry.key) ? "checked" : "";
+        return `<label class="scope-check"><input type="checkbox" data-scope-station="${escapeHtml(entry.key)}" ${checked}>${escapeHtml(entry.station.name)} <span class="hint-text">(${entry.station.rawTxtFiles.length} 檔)</span></label>`;
+      })
+      .join("");
+    const productChecked = isProductFullySelected(productName) ? "checked" : "";
+    blocks.push(`
+      <div class="scope-product-card">
+        <div class="scope-product-row">
+          <label class="scope-check scope-check-product"><input type="checkbox" data-scope-product="${escapeHtml(productName)}" ${productChecked}>${escapeHtml(productName)}</label>
+          <span class="hint-text text-xs">${entries.length} 站點</span>
+        </div>
+        <div class="scope-station-list">${stationChecks}</div>
+      </div>
+    `);
+  }
+
+  dom.scopeSelectList.innerHTML = blocks.join("");
+  for (const checkbox of dom.scopeSelectList.querySelectorAll("[data-scope-product]")) {
+    const productName = checkbox.getAttribute("data-scope-product");
+    if (!productName) continue;
+    checkbox.indeterminate = isProductPartiallySelected(productName);
+  }
+
+  const selectedStations = getSelectedStationEntries().length;
+  const totalStations = getSelectableStationEntries().length;
+  const selectedFiles = getSelectedRawTxtCount();
+  dom.scopeSelectSummary.textContent = `目前已勾選 ${selectedStations}/${totalStations} 個站點，共 ${selectedFiles} 個 .TXT 檔案。`;
+}
+
+function onScopeSelectionChange(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) return;
+  if (target.hasAttribute("data-scope-product")) {
+    const productName = target.getAttribute("data-scope-product");
+    if (!productName) return;
+    setProductScopeSelection(productName, target.checked);
+    renderScopeSelection();
+    updateAnalyzeState();
+    return;
+  }
+  if (target.hasAttribute("data-scope-station")) {
+    const key = target.getAttribute("data-scope-station");
+    if (!key) return;
+    if (target.checked) APP.selectedScopes.add(key);
+    else APP.selectedScopes.delete(key);
+    renderScopeSelection();
+    updateAnalyzeState();
+  }
+}
+
+function toggleAllScopes(checked) {
+  for (const entry of getSelectableStationEntries()) {
+    if (checked) APP.selectedScopes.add(entry.key);
+    else APP.selectedScopes.delete(entry.key);
+  }
+  renderScopeSelection();
+  updateAnalyzeState();
+}
+
 function hasAnalyzedData() {
   for (const product of getProducts()) {
     for (const station of product.stations.values()) {
@@ -257,7 +398,7 @@ function resetResultsUI() {
 function updateAnalyzeState() {
   if (APP.sourceMode === "xlsx") dom.analyzeBtn.disabled = APP.files.length === 0;
   else {
-    const hasRawFiles = getTotalRawTxtCount() > 0;
+    const hasRawFiles = APP.sourceMode === "folder" ? getSelectedRawTxtCount() > 0 : getTotalRawTxtCount() > 0;
     const hasManualProduct = APP.manualProductName.length > 0;
     const hasAutoProduct = getProducts().length > 0;
     dom.analyzeBtn.disabled = !(hasRawFiles && (hasManualProduct || hasAutoProduct));
@@ -328,6 +469,8 @@ function handleFolderSelection(event) {
   resetResultsUI();
 
   if (!APP.files.length) {
+    APP.selectedScopes.clear();
+    renderScopeSelection();
     updateAnalyzeState();
     return;
   }
@@ -371,8 +514,10 @@ function handleFolderSelection(event) {
   const stationNames = getStationNames();
   APP.activeStation = stationNames[0] ?? "";
   APP.activeProduct = getProducts()[0]?.name ?? "";
+  initializeScopeSelection();
 
   renderMeta(buildMetaCards());
+  renderScopeSelection();
 
   const txtCount = getTotalRawTxtCount();
   if (!txtCount) {
@@ -388,6 +533,7 @@ function handleFolderSelection(event) {
 function handleTxtSelection(event) {
   APP.sourceMode = "txt";
   APP.files = Array.from(event.target.files || []);
+  APP.selectedScopes.clear();
   APP.rootName = "直接 TXT 上傳";
   APP.products.clear();
   APP.activeStation = "";
@@ -407,6 +553,7 @@ function handleTxtSelection(event) {
 
   dom.folderName.textContent = txtFiles.length ? `直接 TXT 上傳（${txtFiles.length} 檔）` : "尚未選擇";
   renderMeta(buildMetaCards());
+  renderScopeSelection();
 
   if (!txtFiles.length) showMessage("未選到任何 .TXT 檔案。", "error");
   else showMessage(`已選擇 ${txtFiles.length} 個 .TXT 檔案。`, "success");
@@ -417,6 +564,7 @@ function handleTxtSelection(event) {
 function handleXlsxSelection(event) {
   APP.sourceMode = "xlsx";
   APP.files = Array.from(event.target.files || []).filter((f) => /\.(xlsx|xls)$/i.test(f.name));
+  APP.selectedScopes.clear();
   APP.rootName = APP.files.length ? `匯入 XLSX（${APP.files.length} 檔）` : "";
   APP.products.clear();
   APP.activeStation = "";
@@ -425,6 +573,7 @@ function handleXlsxSelection(event) {
 
   dom.folderName.textContent = APP.files.length ? APP.rootName : "尚未選擇";
   renderMeta([{ product: "-", lotNo: "-", waferId: "-", station: "-" }]);
+  renderScopeSelection();
 
   if (!APP.files.length) showMessage("未選到任何 XLSX 檔案。", "error");
   else showMessage(`已選擇 ${APP.files.length} 個 XLSX 檔案。`, "success");
@@ -474,9 +623,10 @@ async function startAnalysis() {
   }
 
   APP.manualProductName = dom.productInput.value.trim();
-  const totalFiles = getTotalRawTxtCount();
+  const selectedEntries = APP.sourceMode === "folder" ? getSelectedStationEntries() : getSelectableStationEntries();
+  const totalFiles = selectedEntries.reduce((acc, entry) => acc + entry.station.rawTxtFiles.length, 0);
   if (!totalFiles) {
-    showMessage("請先選擇資料夾或上傳 TXT。", "error");
+    showMessage(APP.sourceMode === "folder" ? "請先勾選至少一個要分析的產品/站點。" : "請先選擇資料夾或上傳 TXT。", "error");
     updateAnalyzeState();
     return;
   }
@@ -494,69 +644,77 @@ async function startAnalysis() {
   let processed = 0;
   for (const product of getProducts()) {
     for (const station of product.stations.values()) {
-      const itemMap = new Map();
-      const tdMaxMap = new Map();
-      const siteTdMap = new Map();
+      station.touchDownCount = 0;
+      station.stationTotalTime = 0;
+      station.siteTdMap = new Map();
+      station.stats = [];
+    }
+  }
 
-      for (const file of station.rawTxtFiles) {
-        const fileMeta = parseRawTxtFilename(file.name);
-        const siteKey = fileMeta ? String(fileMeta.site) : "Unknown";
-        const text = await file.text();
-        const lines = text.split(/\r?\n/);
+  for (const entry of selectedEntries) {
+    const { station } = entry;
+    const itemMap = new Map();
+    const tdMaxMap = new Map();
+    const siteTdMap = new Map();
 
-        for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
-          const line = lines[lineIndex];
-          const tdMatch = line.match(TOTAL_TEST_TIME_REGEX);
-          if (tdMatch) {
-            const td = String(Number.parseInt(tdMatch[1], 10));
-            const tdTime = Number.parseFloat(tdMatch[2]);
-            if (Number.isFinite(tdTime)) {
-              const currentMax = tdMaxMap.get(td);
-              if (currentMax === undefined || tdTime > currentMax) tdMaxMap.set(td, tdTime);
+    for (const file of station.rawTxtFiles) {
+      const fileMeta = parseRawTxtFilename(file.name);
+      const siteKey = fileMeta ? String(fileMeta.site) : "Unknown";
+      const text = await file.text();
+      const lines = text.split(/\r?\n/);
 
-              const siteEntry = siteTdMap.get(siteKey) ?? new Map();
-              const siteCurrentMax = siteEntry.get(td);
-              if (siteCurrentMax === undefined || tdTime > siteCurrentMax) siteEntry.set(td, tdTime);
-              siteTdMap.set(siteKey, siteEntry);
-            }
+      for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+        const line = lines[lineIndex];
+        const tdMatch = line.match(TOTAL_TEST_TIME_REGEX);
+        if (tdMatch) {
+          const td = String(Number.parseInt(tdMatch[1], 10));
+          const tdTime = Number.parseFloat(tdMatch[2]);
+          if (Number.isFinite(tdTime)) {
+            const currentMax = tdMaxMap.get(td);
+            if (currentMax === undefined || tdTime > currentMax) tdMaxMap.set(td, tdTime);
+
+            const siteEntry = siteTdMap.get(siteKey) ?? new Map();
+            const siteCurrentMax = siteEntry.get(td);
+            if (siteCurrentMax === undefined || tdTime > siteCurrentMax) siteEntry.set(td, tdTime);
+            siteTdMap.set(siteKey, siteEntry);
           }
-
-          const m = line.match(TEST_TIME_REGEX);
-          if (!m) continue;
-          const testNo = m[1].trim();
-          const testItem = m[2].trim();
-          const value = Number.parseFloat(m[3]);
-          const unit = m[4].trim();
-          if (!Number.isFinite(value)) continue;
-          const lineMeta = parseTestTimeLineMeta(line);
-
-          const row = itemMap.get(testItem) ?? { testNos: new Set(), testItem, values: [], unit };
-          row.testNos.add(testNo);
-          row.values.push({
-            value,
-            site: siteKey,
-            td: lineMeta.td || "Unknown",
-            systemDut: lineMeta.systemDut,
-            x: lineMeta.x,
-            y: lineMeta.y,
-            testNo,
-            testItem,
-            lineIndex,
-            lines,
-            rawLine: line,
-          });
-          itemMap.set(testItem, row);
         }
 
-        processed += 1;
-        setProgress(Math.round((processed / totalFiles) * 100));
+        const m = line.match(TEST_TIME_REGEX);
+        if (!m) continue;
+        const testNo = m[1].trim();
+        const testItem = m[2].trim();
+        const value = Number.parseFloat(m[3]);
+        const unit = m[4].trim();
+        if (!Number.isFinite(value)) continue;
+        const lineMeta = parseTestTimeLineMeta(line);
+
+        const row = itemMap.get(testItem) ?? { testNos: new Set(), testItem, values: [], unit };
+        row.testNos.add(testNo);
+        row.values.push({
+          value,
+          site: siteKey,
+          td: lineMeta.td || "Unknown",
+          systemDut: lineMeta.systemDut,
+          x: lineMeta.x,
+          y: lineMeta.y,
+          testNo,
+          testItem,
+          lineIndex,
+          lines,
+          rawLine: line,
+        });
+        itemMap.set(testItem, row);
       }
 
-      station.touchDownCount = tdMaxMap.size;
-      station.stationTotalTime = Array.from(tdMaxMap.values()).reduce((acc, n) => acc + n, 0);
-      station.siteTdMap = siteTdMap;
-      station.stats = buildStats(itemMap, station.stationTotalTime);
+      processed += 1;
+      setProgress(Math.round((processed / totalFiles) * 100));
     }
+
+    station.touchDownCount = tdMaxMap.size;
+    station.stationTotalTime = Array.from(tdMaxMap.values()).reduce((acc, n) => acc + n, 0);
+    station.siteTdMap = siteTdMap;
+    station.stats = buildStats(itemMap, station.stationTotalTime);
   }
 
   const stationsWithStats = getStationNames().filter((stationName) => getProductsInStation(stationName).length > 0);
@@ -1492,10 +1650,12 @@ function applyEntryModeUI() {
       : `規則：先勾選模式再上傳。<br>
           - <code>資料夾匯入</code>：會讀取符合 <code>產品主目錄/RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/home/winbond/rawdata</code> 的 .TXT（例如：<code>FAG112/RW_CP1_65296Z600_01_S1P1_20260112181636/home/winbond/rawdata</code>）<br>
           - <code>單選 .TXT 檔案</code>：直接解析你選的單一檔案<br>
-          ※ 僅分析產品目錄開頭為 <code>FAG/EAG/MAG/AAG/KAG/RAG</code> 的資料夾，其餘會略過`;
+          ※ 僅分析產品目錄開頭為 <code>FAG/EAG/MAG/AAG/KAG/RAG</code> 的資料夾，其餘會略過<br>
+          ※ 掃描後可於「解析範圍勾選」選擇要分析的產品/站點`;
   }
   if (isXlsx) APP.sourceMode = "xlsx";
   else if (APP.sourceMode === "xlsx") APP.sourceMode = Array.from(dom.sourceModeRadios).find((r) => r.checked)?.value ?? "folder";
+  renderScopeSelection();
   updateAnalyzeState();
 }
 
