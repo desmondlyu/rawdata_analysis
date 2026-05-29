@@ -2564,7 +2564,7 @@ function renderGroupStationReductionChart(
       labels: rows.map((row) => row.productName),
       datasets: [{
         label: "所有站點總時間縮減比例 (%)",
-        data: rows.map((row) => (requireOverrides && !row.hasOverride ? null : row.reductionPct)),
+        data: rows.map((row) => row.reductionPct),
         backgroundColor: rows.map((_, idx) => PRODUCT_COLORS[idx % PRODUCT_COLORS.length] || "#f97316"),
       }],
     },
@@ -2579,7 +2579,6 @@ function renderGroupStationReductionChart(
               const productName = String(context.label || "");
               const row = rows.find((item) => item.productName === productName);
               if (!row) return "";
-              if (requireOverrides && !row.hasOverride) return `${productName}：尚未輸入群組化報表模擬數據`;
               return `${productName}：降低 ${row.reductionPct.toFixed(2)}%（舊 ${fmt(row.baselineTotal)}s → 新 ${fmt(row.scenarioTotal)}s）`;
             },
           },
