@@ -408,7 +408,7 @@ body.theme-light .source-mode-option {
 .kpi-toolbar {
   display: flex;
   justify-content: flex-end;
-  padding: 0.55rem 0.65rem 0;
+  padding: 0.55rem 1.5rem 0;
 }
 
 .kpi-card {
