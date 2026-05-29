@@ -10,6 +10,7 @@ const APP = {
   activeProduct: "",
   chartSortProduct: "",
   chartFilters: { product: [], process: [], density: [], voltage: [] },
+  scenarioOverrides: new Map(),
   enableAnomalyDetail: false,
   tableSort: { key: "mean", dir: "desc" },
   tableExpanded: new Set(),
@@ -17,8 +18,9 @@ const APP = {
   scopeCollapsed: false,
   kpiCollapsed: false,
   chartCollapsed: false,
+  floatingStationTabsCollapsed: false,
   selectedScopes: new Set(),
-  charts: { count: null, mean: null, range: null, ratio: null },
+  charts: { count: null, mean: null, range: null, ratio: null, reduction: null },
 };
 
 const ROOT_REGEX = /^RW_(.+)_([^_]+)_([^_]+)_([^_]+)_(\d{14})$/i;
@@ -63,9 +65,13 @@ const dom = {
   progressBar: document.getElementById("progress-bar"),
   stationTabsSection: document.getElementById("station-tabs-section"),
   stationTabs: document.getElementById("station-tabs"),
+  floatingStationTabsPanel: document.getElementById("floating-station-tabs-panel"),
+  floatingStationTabs: document.getElementById("floating-station-tabs"),
+  floatingStationTabsToggleBtn: document.getElementById("floating-station-tabs-toggle-btn"),
   kpiToggleBtn: document.getElementById("kpi-toggle-btn"),
   tableProductTabs: document.getElementById("table-product-tabs"),
   tableToggleBtn: document.getElementById("table-toggle-btn"),
+  scenarioResetBtn: document.getElementById("scenario-reset-btn"),
   tableContent: document.getElementById("table-content"),
   siteProductTabs: document.getElementById("site-product-tabs"),
   kpiSection: document.getElementById("kpi-section"),
@@ -97,11 +103,14 @@ dom.anomalyDetailToggle?.addEventListener("change", onAnomalyToggleChange);
 dom.analyzeBtn.addEventListener("click", startAnalysis);
 dom.exportBtn.addEventListener("click", exportXlsx);
 dom.stationTabs?.addEventListener("click", onStationTabClick);
+dom.floatingStationTabs?.addEventListener("click", onStationTabClick);
+dom.floatingStationTabsToggleBtn?.addEventListener("click", onFloatingStationTabsToggleClick);
 dom.kpiToggleBtn?.addEventListener("click", onKpiToggleClick);
 dom.tableProductTabs?.addEventListener("click", onProductTabClick);
 dom.siteProductTabs?.addEventListener("click", onProductTabClick);
 dom.statsThead?.addEventListener("click", onStatsHeadClick);
 dom.statsTbody?.addEventListener("click", onStatsBodyClick);
+dom.statsTbody?.addEventListener("input", onScenarioInputChange);
 dom.chartSortProduct?.addEventListener("change", onChartSortProductChange);
 dom.chartFilterProductBtn?.addEventListener("click", onChartProductFilterToggle);
 dom.chartFilterProductMenu?.addEventListener("change", onChartProductFilterItemChange);
@@ -113,6 +122,7 @@ dom.chartFilterDensityMenu?.addEventListener("change", (event) => onChartMultiFi
 dom.chartFilterVoltageMenu?.addEventListener("change", (event) => onChartMultiFilterItemChange(event, "voltage"));
 dom.chartToggleBtn?.addEventListener("click", onChartToggleClick);
 dom.tableToggleBtn?.addEventListener("click", onTableToggleClick);
+dom.scenarioResetBtn?.addEventListener("click", onScenarioResetClick);
 dom.entryTabAnalysis?.addEventListener("click", () => switchEntryPage("analysis"));
 dom.entryTabXlsx?.addEventListener("click", () => switchEntryPage("xlsx"));
 dom.entryTabGuide?.addEventListener("click", () => switchEntryPage("guide"));
@@ -127,6 +137,7 @@ document.addEventListener("click", onDocumentClick);
 initializeGuidePage();
 applyEntryModeUI();
 initializeTheme();
+syncFloatingStationTabsCollapsedUI();
 
 function applyTheme(theme) {
   const isLight = theme === "light";
@@ -461,19 +472,23 @@ function resetResultsUI() {
   }
   APP.chartSortProduct = "";
   APP.chartFilters = { product: [], process: [], density: [], voltage: [] };
+  APP.scenarioOverrides.clear();
   APP.tableExpanded.clear();
   APP.tableCollapsed = true;
   APP.scopeCollapsed = false;
   APP.kpiCollapsed = false;
   APP.chartCollapsed = false;
+  APP.floatingStationTabsCollapsed = false;
 
   dom.stationTabsSection?.classList.add("hidden");
+  dom.floatingStationTabsPanel?.classList.add("hidden");
   dom.kpiSection.classList.add("hidden");
   dom.chartSection.classList.add("hidden");
   dom.tableSection.classList.add("hidden");
   dom.siteTdSection.classList.add("hidden");
 
   if (dom.stationTabs) dom.stationTabs.innerHTML = "";
+  if (dom.floatingStationTabs) dom.floatingStationTabs.innerHTML = "";
   if (dom.tableProductTabs) dom.tableProductTabs.innerHTML = "";
   if (dom.siteProductTabs) dom.siteProductTabs.innerHTML = "";
   if (dom.chartSortProduct) dom.chartSortProduct.innerHTML = "";
@@ -491,6 +506,7 @@ function resetResultsUI() {
   syncTableCollapsedUI();
   syncKpiCollapsedUI();
   syncChartCollapsedUI();
+  syncFloatingStationTabsCollapsedUI();
 
   destroyKpiCharts();
   for (const key of Object.keys(APP.charts)) {
@@ -542,6 +558,19 @@ function onChartToggleClick() {
   APP.chartCollapsed = !APP.chartCollapsed;
   syncChartCollapsedUI();
   if (!APP.chartCollapsed) renderCharts();
+}
+
+function syncFloatingStationTabsCollapsedUI() {
+  if (!dom.floatingStationTabsPanel || !dom.floatingStationTabsToggleBtn) return;
+  dom.floatingStationTabsPanel.classList.toggle("is-collapsed", APP.floatingStationTabsCollapsed);
+  dom.floatingStationTabsToggleBtn.textContent = APP.floatingStationTabsCollapsed ? "▲" : "▼";
+  dom.floatingStationTabsToggleBtn.setAttribute("aria-expanded", APP.floatingStationTabsCollapsed ? "false" : "true");
+  dom.floatingStationTabsToggleBtn.setAttribute("aria-label", APP.floatingStationTabsCollapsed ? "向上展開浮動站點面板" : "向下收合浮動站點面板");
+}
+
+function onFloatingStationTabsToggleClick() {
+  APP.floatingStationTabsCollapsed = !APP.floatingStationTabsCollapsed;
+  syncFloatingStationTabsCollapsedUI();
 }
 
 function updateAnalyzeState() {
@@ -1313,7 +1342,17 @@ function syncActiveProductForStation() {
 
 function renderStationTabs(stationNames) {
   if (!dom.stationTabsSection || !dom.stationTabs) return;
-  dom.stationTabs.innerHTML = "";
+  const names = stationNames.map((name) => String(name || "").trim()).filter(Boolean);
+  renderStationTabHost(dom.stationTabs, names);
+  renderStationTabHost(dom.floatingStationTabs, names);
+  dom.stationTabsSection.classList.toggle("hidden", names.length === 0);
+  dom.floatingStationTabsPanel?.classList.toggle("hidden", names.length === 0);
+  syncFloatingStationTabsCollapsedUI();
+}
+
+function renderStationTabHost(host, stationNames) {
+  if (!host) return;
+  host.innerHTML = "";
   for (const rawName of stationNames) {
     const name = String(rawName || "").trim();
     if (!name) continue;
@@ -1323,9 +1362,8 @@ function renderStationTabs(stationNames) {
     btn.dataset.station = name;
     btn.setAttribute("aria-selected", name === APP.activeStation ? "true" : "false");
     btn.textContent = name;
-    dom.stationTabs.appendChild(btn);
+    host.appendChild(btn);
   }
-  dom.stationTabsSection.classList.remove("hidden");
 }
 
 function renderProductTabs() {
@@ -1444,6 +1482,31 @@ function onStatsBodyClick(event) {
   if (APP.tableExpanded.has(key)) APP.tableExpanded.delete(key);
   else APP.tableExpanded.add(key);
   renderTable();
+}
+
+function onScenarioInputChange(event) {
+  const input = event.target;
+  if (!(input instanceof HTMLInputElement)) return;
+  if (!input.matches("[data-scenario-field]")) return;
+  const field = input.getAttribute("data-scenario-field");
+  const stationName = input.getAttribute("data-scenario-station");
+  const productName = input.getAttribute("data-scenario-product");
+  const testItem = input.getAttribute("data-scenario-item");
+  if (!field || !stationName || !productName || !testItem) return;
+  const product = getProductByName(productName);
+  const station = product?.stations.get(stationName);
+  const stat = station?.stats.find((s) => s.testItem === testItem);
+  if (!product || !station || !stat || (field !== "mean" && field !== "range")) return;
+  const next = Number.parseFloat(input.value);
+  applyScenarioOverride(productName, stationName, testItem, field, next, stat[field]);
+  syncScenarioCells();
+  renderCharts();
+}
+
+function onScenarioResetClick() {
+  APP.scenarioOverrides.clear();
+  renderTable();
+  renderCharts();
 }
 
 function onStatsHeadClick(event) {
@@ -1595,6 +1658,64 @@ function renderKpi() {
   dom.kpiSection.classList.remove("hidden");
 }
 
+function makeScenarioOverrideKey(productName, stationName, testItem) {
+  return `${String(productName || "").trim()}||${String(stationName || "").trim()}||${String(testItem || "").trim()}`;
+}
+
+function getScenarioOverride(productName, stationName, testItem) {
+  return APP.scenarioOverrides.get(makeScenarioOverrideKey(productName, stationName, testItem)) || null;
+}
+
+function applyScenarioOverride(productName, stationName, testItem, field, nextValue, baseValue) {
+  const key = makeScenarioOverrideKey(productName, stationName, testItem);
+  const current = APP.scenarioOverrides.get(key) || {};
+  if (Number.isFinite(nextValue) && nextValue >= 0 && Math.abs(nextValue - baseValue) > 1e-9) current[field] = nextValue;
+  else delete current[field];
+  if (!Number.isFinite(current.mean) && !Number.isFinite(current.range)) APP.scenarioOverrides.delete(key);
+  else APP.scenarioOverrides.set(key, current);
+}
+
+function getScenarioMean(stat, productName, stationName) {
+  const override = getScenarioOverride(productName, stationName, stat.testItem);
+  return Number.isFinite(override?.mean) ? override.mean : stat.mean;
+}
+
+function getScenarioRange(stat, productName, stationName) {
+  const override = getScenarioOverride(productName, stationName, stat.testItem);
+  return Number.isFinite(override?.range) ? override.range : stat.range;
+}
+
+function getScenarioEffectiveMean(stat, productName, stationName) {
+  const scenarioMean = getScenarioMean(stat, productName, stationName);
+  const scenarioRange = getScenarioRange(stat, productName, stationName);
+  const baseRange = Number(stat.range);
+  const rangeFactor = Number.isFinite(baseRange) && baseRange > 0 ? scenarioRange / baseRange : 1;
+  const effective = scenarioMean * (Number.isFinite(rangeFactor) && rangeFactor > 0 ? rangeFactor : 1);
+  return Number.isFinite(effective) && effective >= 0 ? effective : 0;
+}
+
+function getScenarioStationTotalTime(productName, stationName) {
+  const product = getProductByName(productName);
+  const station = product?.stations.get(stationName);
+  if (!station) return 0;
+  const delta = station.stats.reduce((acc, stat) => acc + (getScenarioEffectiveMean(stat, productName, stationName) - stat.mean) * stat.count, 0);
+  return Math.max(0, station.stationTotalTime + delta);
+}
+
+function getScenarioTtRatio(stat, productName, stationName, scenarioStationTotal = null) {
+  const stationTotal = Number.isFinite(scenarioStationTotal) ? scenarioStationTotal : getScenarioStationTotalTime(productName, stationName);
+  if (!Number.isFinite(stationTotal) || stationTotal <= 0) return 0;
+  return (getScenarioEffectiveMean(stat, productName, stationName) * stat.count / stationTotal) * 100;
+}
+
+function metricValueWithScenario(stat, metric, productName, stationName, scenarioStationTotal = null) {
+  if (!stat) return 0;
+  if (metric === "count") return stat.count;
+  if (metric === "mean") return Number(getScenarioMean(stat, productName, stationName).toFixed(6));
+  if (metric === "range") return Number(getScenarioRange(stat, productName, stationName).toFixed(6));
+  return Number(getScenarioTtRatio(stat, productName, stationName, scenarioStationTotal).toFixed(6));
+}
+
 function sortStats(stats, sortKey, sortDir) {
   const sign = sortDir === "asc" ? 1 : -1;
   return stats.slice().sort((a, b) => {
@@ -1607,21 +1728,26 @@ function sortStats(stats, sortKey, sortDir) {
 }
 
 function renderTable() {
+  const product = getActiveProduct();
   const station = getActiveStationData();
-  if (!station) {
+  if (!product || !station) {
     dom.tableSection.classList.add("hidden");
     APP.tableCollapsed = true;
     syncTableCollapsedUI();
     return;
   }
   const sorted = sortStats(station.stats, APP.tableSort.key, APP.tableSort.dir);
+  const scenarioStationTotal = getScenarioStationTotalTime(product.name, station.name);
   dom.statsTbody.innerHTML = sorted
     .map((s) => {
       const rowKey = makeTableExpandKey(station.name, s.testItem);
       const canExpand = Boolean(s.maxDetailLine);
       const expanded = APP.tableExpanded.has(rowKey);
+      const scenarioMean = getScenarioMean(s, product.name, station.name);
+      const scenarioRange = getScenarioRange(s, product.name, station.name);
+      const scenarioRatio = getScenarioTtRatio(s, product.name, station.name, scenarioStationTotal);
       const baseRow = `
-      <tr>
+      <tr data-scenario-row="true" data-scenario-item="${escapeHtml(s.testItem)}">
         <td class="expand-cell">${APP.enableAnomalyDetail && canExpand ? `<button type="button" class="expand-btn" data-expand-key="${escapeHtml(rowKey)}" aria-expanded="${expanded ? "true" : "false"}">${expanded ? "−" : "+"}</button>` : ""}</td>
         <td title="${escapeHtml(s.testItem)}">${escapeHtml(s.testItem)}</td>
         <td>${s.count}</td>
@@ -1629,6 +1755,9 @@ function renderTable() {
         <td>${fmt(s.median)}</td>
         <td>${fmt(s.range)}</td>
         <td>${fmt(s.ttRatio)}</td>
+        <td><input type="number" min="0" step="0.000001" class="scenario-input" data-scenario-field="mean" data-scenario-product="${escapeHtml(product.name)}" data-scenario-station="${escapeHtml(station.name)}" data-scenario-item="${escapeHtml(s.testItem)}" value="${escapeHtml(fmt(scenarioMean))}"></td>
+        <td><input type="number" min="0" step="0.000001" class="scenario-input" data-scenario-field="range" data-scenario-product="${escapeHtml(product.name)}" data-scenario-station="${escapeHtml(station.name)}" data-scenario-item="${escapeHtml(s.testItem)}" value="${escapeHtml(fmt(scenarioRange))}"></td>
+        <td data-scenario-tt-ratio="true">${fmt(scenarioRatio)}</td>
         <td>${fmt(s.min)}</td>
         <td>${escapeHtml(formatSiteTdSource(s.minSite, s.minTd))}</td>
         <td>${fmt(s.max)}</td>
@@ -1638,13 +1767,30 @@ function renderTable() {
       return `${baseRow}
       <tr class="detail-row">
         <td></td>
-        <td colspan="10" class="detail-cell"><code>${escapeHtml(s.maxDetailLine)}</code></td>
+        <td colspan="13" class="detail-cell"><code>${escapeHtml(s.maxDetailLine)}</code></td>
       </tr>`;
     })
     .join("");
   renderSortHeaderState();
   syncTableCollapsedUI();
   dom.tableSection.classList.remove("hidden");
+}
+
+function syncScenarioCells() {
+  const product = getActiveProduct();
+  const station = getActiveStationData();
+  if (!product || !station || !dom.statsTbody) return;
+  const statMap = new Map(station.stats.map((s) => [s.testItem, s]));
+  const scenarioStationTotal = getScenarioStationTotalTime(product.name, station.name);
+  const rows = dom.statsTbody.querySelectorAll("tr[data-scenario-row='true']");
+  for (const row of rows) {
+    const item = row.getAttribute("data-scenario-item");
+    if (!item) continue;
+    const stat = statMap.get(item);
+    if (!stat) continue;
+    const ratioCell = row.querySelector("[data-scenario-tt-ratio='true']");
+    if (ratioCell) ratioCell.textContent = fmt(getScenarioTtRatio(stat, product.name, station.name, scenarioStationTotal));
+  }
 }
 
 function normalizeFilterValue(value) {
@@ -1831,19 +1977,12 @@ function buildChartLabels(items) {
   return items.map((s) => (s.testItem.length > 32 ? `${s.testItem.slice(0, 32)}...` : s.testItem));
 }
 
-function getTopByMetric(stats, metricKey) {
+function getTopByMetric(stats, metricKey, valueResolver = null) {
+  const resolver = typeof valueResolver === "function" ? valueResolver : (s) => s?.[metricKey] ?? 0;
   return stats
     .slice()
-    .sort((a, b) => ((b[metricKey] ?? 0) - (a[metricKey] ?? 0) !== 0 ? (b[metricKey] ?? 0) - (a[metricKey] ?? 0) : a.testItem.localeCompare(b.testItem)))
+    .sort((a, b) => ((resolver(b) - resolver(a)) !== 0 ? (resolver(b) - resolver(a)) : a.testItem.localeCompare(b.testItem)))
     .slice(0, 15);
-}
-
-function metricValue(stat, metric) {
-  if (!stat) return 0;
-  if (metric === "count") return stat.count;
-  if (metric === "mean") return Number(stat.mean.toFixed(6));
-  if (metric === "range") return Number(stat.range.toFixed(6));
-  return Number(stat.ttRatio.toFixed(6));
 }
 
 function renderMetricChart(canvasId, metricKey, label, colorFallback) {
@@ -1854,15 +1993,21 @@ function renderMetricChart(canvasId, metricKey, label, colorFallback) {
 
   const sortProduct = getProductByName(APP.chartSortProduct) ?? productsInStation[0];
   const sortStation = sortProduct?.stations.get(APP.activeStation);
-  const top = getTopByMetric(sortStation?.stats ?? [], metricKey);
+  const sortScenarioTotal = getScenarioStationTotalTime(sortProduct.name, APP.activeStation);
+  const top = getTopByMetric(
+    sortStation?.stats ?? [],
+    metricKey,
+    (stat) => metricValueWithScenario(stat, metricKey, sortProduct.name, APP.activeStation, sortScenarioTotal),
+  );
   const labels = buildChartLabels(top);
   const rawItems = top.map((item) => item.testItem);
   const datasets = productsInStation.map((product, idx) => {
     const station = product.stations.get(APP.activeStation);
     const statMap = new Map((station?.stats ?? []).map((s) => [s.testItem, s]));
+    const scenarioStationTotal = getScenarioStationTotalTime(product.name, APP.activeStation);
     return {
       label: product.name,
-      data: rawItems.map((item) => metricValue(statMap.get(item), metricKey)),
+      data: rawItems.map((item) => metricValueWithScenario(statMap.get(item), metricKey, product.name, APP.activeStation, scenarioStationTotal)),
       backgroundColor: PRODUCT_COLORS[idx % PRODUCT_COLORS.length] || colorFallback,
     };
   });
@@ -1877,6 +2022,78 @@ function renderMetricChart(canvasId, metricKey, label, colorFallback) {
       scales: {
         x: { ticks: { color: "#94a3b8" }, grid: { color: "#1e293b" } },
         y: { ticks: { color: "#94a3b8" }, grid: { color: "#1e293b" } },
+      },
+    },
+  });
+}
+
+function renderStationReductionChart() {
+  const canvas = document.getElementById("tt-reduction-chart");
+  if (!canvas) return null;
+  const stationNames = getStationNames();
+  if (!stationNames.length) return null;
+
+  const rowByKey = new Map();
+  const productNameSet = new Set();
+  for (const stationName of stationNames) {
+    const products = getChartFilteredProductsInStation(stationName);
+    for (const product of products) {
+      const station = product.stations.get(stationName);
+      const oldSeconds = station?.stationTotalTime || 0;
+      if (oldSeconds <= 0) continue;
+      const newSeconds = getScenarioStationTotalTime(product.name, stationName);
+      const reductionPct = ((oldSeconds - newSeconds) / oldSeconds) * 100;
+      const key = makeScopeKey(product.name, stationName);
+      rowByKey.set(key, {
+        productName: product.name,
+        stationName,
+        oldSeconds,
+        newSeconds,
+        reductionPct: Number(Math.max(0, reductionPct).toFixed(6)),
+      });
+      productNameSet.add(product.name);
+    }
+  }
+
+  const productNames = Array.from(productNameSet).sort((a, b) => a.localeCompare(b));
+  if (!productNames.length) return null;
+  const datasets = productNames.map((productName, idx) => ({
+    label: productName,
+    data: stationNames.map((stationName) => rowByKey.get(makeScopeKey(productName, stationName))?.reductionPct ?? null),
+    backgroundColor: PRODUCT_COLORS[idx % PRODUCT_COLORS.length] || "#f97316",
+  }));
+
+  return new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels: stationNames,
+      datasets,
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: "#cbd5e1" }, title: { display: true, text: "Scenario vs Baseline（By 產品 × 站點）" } },
+        tooltip: {
+          callbacks: {
+            label: (context) => {
+              const stationName = String(context.label || "");
+              const productName = String(context.dataset?.label || "");
+              const row = rowByKey.get(makeScopeKey(productName, stationName));
+              if (!row) return "";
+              return `${productName}：降低 ${row.reductionPct.toFixed(2)}%（舊 ${fmt(row.oldSeconds)}s → 新 ${fmt(row.newSeconds)}s）`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { color: "#94a3b8" }, grid: { color: "#1e293b" } },
+        y: {
+          beginAtZero: true,
+          ticks: { color: "#94a3b8", callback: (value) => `${value}%` },
+          grid: { color: "#1e293b" },
+          title: { display: true, text: "降低百分比 (%)", color: "#94a3b8" },
+        },
       },
     },
   });
@@ -1902,6 +2119,7 @@ function renderCharts() {
   APP.charts.mean = renderMetricChart("mean-chart", "mean", "Mean (s)", "#10b981");
   APP.charts.range = renderMetricChart("range-chart", "range", "Range (s)", "#f59e0b");
   APP.charts.ratio = renderMetricChart("tt-ratio-chart", "ttRatio", "TT Ratio/站點 (%)", "#a855f7");
+  APP.charts.reduction = renderStationReductionChart();
   dom.chartSection.classList.remove("hidden");
 }
 

@@ -90,14 +90,14 @@
             <h3 class="text-base font-bold">解析範圍勾選</h3>
             <p class="hint-text text-sm">可勾選要分析的產品與站點（不需搬移資料夾）</p>
           </div>
-          <div class="scope-select-actions">
-            <button id="scope-select-all" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold">全選</button>
-            <button id="scope-select-none" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold">全不選</button>
-          </div>
         </div>
         <div class="scope-select-toolbar mt-2">
           <p id="scope-select-summary" class="hint-text text-sm"></p>
-          <button id="scope-toggle-btn" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold" aria-expanded="true">收合全部</button>
+          <div class="scope-select-actions">
+            <button id="scope-select-all" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold">全選</button>
+            <button id="scope-select-none" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold">全不選</button>
+            <button id="scope-toggle-btn" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold" aria-expanded="true">收合全部</button>
+          </div>
         </div>
         <div id="scope-select-list" class="scope-select-list mt-3"></div>
       </section>
@@ -124,6 +124,14 @@
         <button id="kpi-toggle-btn" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold" aria-expanded="true">收合全部</button>
       </div>
       <section id="kpi-section" class="kpi-panel hidden"></section>
+    </section>
+
+    <section id="floating-station-tabs-panel" class="floating-station-tabs-panel hidden" aria-label="浮動站點切換">
+      <div class="floating-station-tabs-head">
+        <div class="floating-station-tabs-title">站點快速切換</div>
+        <button id="floating-station-tabs-toggle-btn" type="button" class="floating-station-tabs-toggle-btn" aria-expanded="true" aria-label="向下收合浮動站點面板">▼</button>
+      </div>
+      <div id="floating-station-tabs" class="station-tabs station-tabs--floating" role="tablist" aria-label="浮動站點切換"></div>
     </section>
 
     <section id="chart-section" class="card p-6 hidden mx-6 mb-6">
@@ -170,13 +178,19 @@
         <div class="chart-box">
           <canvas id="tt-ratio-chart" aria-label="TT Ratio/站點 (%)"></canvas>
         </div>
+        <div class="chart-box lg:col-span-2">
+          <canvas id="tt-reduction-chart" aria-label="整體測試時間降低百分比（新vs舊）"></canvas>
+        </div>
       </div>
     </section>
 
     <section id="table-section" class="card p-0 overflow-hidden hidden mx-6 mb-6">
       <div class="table-header p-6 border-b border-slate-700">
         <h2 class="text-xl font-bold">Test Item 統計表</h2>
-        <button id="table-toggle-btn" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold" aria-expanded="false">展開全部</button>
+        <div class="table-actions">
+          <button id="scenario-reset-btn" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold">重置模擬</button>
+          <button id="table-toggle-btn" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold" aria-expanded="false">展開全部</button>
+        </div>
       </div>
       <div id="table-content" class="hidden">
         <div class="px-6 pb-2">
@@ -185,7 +199,7 @@
             <div id="table-product-tabs" class="station-tabs" role="tablist" aria-label="Test Item 產品切換"></div>
           </div>
         </div>
-        <div class="overflow-auto">
+        <div class="table-scroll-wrap">
           <table class="min-w-full stat-table">
             <thead id="stats-thead">
               <tr>
@@ -196,6 +210,9 @@
                 <th><button type="button" class="sort-btn" data-sort-key="median">Median (s)</button></th>
                 <th><button type="button" class="sort-btn" data-sort-key="range">Range (s)</button></th>
                 <th><button type="button" class="sort-btn" data-sort-key="ttRatio">TT Ratio/站點 (%)</button></th>
+                <th>模擬 Mean (s)</th>
+                <th>模擬 Range (s)</th>
+                <th>模擬 TT Ratio/站點 (%)</th>
                 <th><button type="button" class="sort-btn" data-sort-key="min">Min (s)</button></th>
                 <th>Min Source (SITE/TD)</th>
                 <th><button type="button" class="sort-btn" data-sort-key="max">Max (s)</button></th>
