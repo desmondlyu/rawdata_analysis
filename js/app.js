@@ -2030,58 +2030,63 @@ function renderMetricChart(canvasId, metricKey, label, colorFallback) {
 function renderStationReductionChart() {
   const canvas = document.getElementById("tt-reduction-chart");
   if (!canvas) return null;
-  const stationNames = getStationNames();
-  if (!stationNames.length) return null;
-
-  const rowByKey = new Map();
-  const productNameSet = new Set();
-  for (const stationName of stationNames) {
-    const products = getChartFilteredProductsInStation(stationName);
-    for (const product of products) {
-      const station = product.stations.get(stationName);
-      const oldSeconds = station?.stationTotalTime || 0;
-      if (oldSeconds <= 0) continue;
-      const newSeconds = getScenarioStationTotalTime(product.name, stationName);
-      const reductionPct = ((oldSeconds - newSeconds) / oldSeconds) * 100;
-      const key = makeScopeKey(product.name, stationName);
-      rowByKey.set(key, {
+  const rows = getProducts()
+    .filter((product) => {
+      const productFilters = Array.isArray(APP.chartFilters.product) ? APP.chartFilters.product : [];
+      const processFilters = Array.isArray(APP.chartFilters.process) ? APP.chartFilters.process.map(normalizeFilterValue).filter(Boolean) : [];
+      const densityFilters = Array.isArray(APP.chartFilters.density) ? APP.chartFilters.density.map(normalizeFilterValue).filter(Boolean) : [];
+      const voltageFilters = Array.isArray(APP.chartFilters.voltage) ? APP.chartFilters.voltage.map(normalizeFilterValue).filter(Boolean) : [];
+      if (productFilters.length > 0 && !productFilters.includes(product.name)) return false;
+      if (processFilters.length > 0 && !processFilters.includes(normalizeFilterValue(product.process))) return false;
+      if (densityFilters.length > 0 && !densityFilters.includes(normalizeFilterValue(product.density))) return false;
+      if (voltageFilters.length > 0 && !voltageFilters.includes(normalizeFilterValue(product.voltage))) return false;
+      return true;
+    })
+    .map((product) => {
+      let baselineTotal = 0;
+      let scenarioTotal = 0;
+      for (const station of product.stations.values()) {
+        const baseSeconds = station?.stationTotalTime || 0;
+        if (baseSeconds <= 0) continue;
+        baselineTotal += baseSeconds;
+        scenarioTotal += getScenarioStationTotalTime(product.name, station.name);
+      }
+      if (baselineTotal <= 0) return null;
+      const reductionPct = ((baselineTotal - scenarioTotal) / baselineTotal) * 100;
+      return {
         productName: product.name,
-        stationName,
-        oldSeconds,
-        newSeconds,
-        reductionPct: Number(Math.max(0, reductionPct).toFixed(6)),
-      });
-      productNameSet.add(product.name);
-    }
-  }
+        baselineTotal,
+        scenarioTotal,
+        reductionPct: Number(reductionPct.toFixed(6)),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.productName.localeCompare(b.productName));
 
-  const productNames = Array.from(productNameSet).sort((a, b) => a.localeCompare(b));
-  if (!productNames.length) return null;
-  const datasets = productNames.map((productName, idx) => ({
-    label: productName,
-    data: stationNames.map((stationName) => rowByKey.get(makeScopeKey(productName, stationName))?.reductionPct ?? null),
-    backgroundColor: PRODUCT_COLORS[idx % PRODUCT_COLORS.length] || "#f97316",
-  }));
+  if (!rows.length) return null;
 
   return new Chart(canvas, {
     type: "bar",
     data: {
-      labels: stationNames,
-      datasets,
+      labels: rows.map((row) => row.productName),
+      datasets: [{
+        label: "所有站點總時間縮減比例 (%)",
+        data: rows.map((row) => row.reductionPct),
+        backgroundColor: rows.map((_, idx) => PRODUCT_COLORS[idx % PRODUCT_COLORS.length] || "#f97316"),
+      }],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { labels: { color: "#cbd5e1" }, title: { display: true, text: "Scenario vs Baseline（By 產品 × 站點）" } },
+        legend: { labels: { color: "#cbd5e1" }, title: { display: true, text: "Scenario vs Baseline（By 產品；全部站點合計）" } },
         tooltip: {
           callbacks: {
             label: (context) => {
-              const stationName = String(context.label || "");
-              const productName = String(context.dataset?.label || "");
-              const row = rowByKey.get(makeScopeKey(productName, stationName));
+              const productName = String(context.label || "");
+              const row = rows.find((item) => item.productName === productName);
               if (!row) return "";
-              return `${productName}：降低 ${row.reductionPct.toFixed(2)}%（舊 ${fmt(row.oldSeconds)}s → 新 ${fmt(row.newSeconds)}s）`;
+              return `${productName}：降低 ${row.reductionPct.toFixed(2)}%（舊 ${fmt(row.baselineTotal)}s → 新 ${fmt(row.scenarioTotal)}s）`;
             },
           },
         },
