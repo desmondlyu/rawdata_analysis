@@ -2494,6 +2494,10 @@ function renderStationReductionChart() {
               const productName = String(context.label || "");
               const row = rows.find((item) => item.productName === productName);
               if (!row) return "";
+              if (row.scenarioTotal > row.baselineTotal) {
+                const increasedPct = ((row.scenarioTotal - row.baselineTotal) / row.baselineTotal) * 100;
+                return `${productName}：模擬後增加 ${increasedPct.toFixed(2)}%（舊 ${fmt(row.baselineTotal)}s → 新 ${fmt(row.scenarioTotal)}s；圖上依規則顯示 0%）`;
+              }
               return `${productName}：降低 ${row.reductionPct.toFixed(2)}%（舊 ${fmt(row.baselineTotal)}s → 新 ${fmt(row.scenarioTotal)}s）`;
             },
           },
@@ -2579,6 +2583,10 @@ function renderGroupStationReductionChart(
               const productName = String(context.label || "");
               const row = rows.find((item) => item.productName === productName);
               if (!row) return "";
+              if (row.scenarioTotal > row.baselineTotal) {
+                const increasedPct = ((row.scenarioTotal - row.baselineTotal) / row.baselineTotal) * 100;
+                return `${productName}：模擬後增加 ${increasedPct.toFixed(2)}%（舊 ${fmt(row.baselineTotal)}s → 新 ${fmt(row.scenarioTotal)}s；圖上依規則顯示 0%）`;
+              }
               return `${productName}：降低 ${row.reductionPct.toFixed(2)}%（舊 ${fmt(row.baselineTotal)}s → 新 ${fmt(row.scenarioTotal)}s）`;
             },
           },
@@ -2971,7 +2979,20 @@ function applyEntryModeUI() {
     dom.sourceRuleText.innerHTML = isXlsx
       ? "規則：請選擇由本工具匯出的 <code>.xlsx</code>，可一次匯入多個產品檔案，系統會自動合併成多產品比較分析。"
       : `規則：先勾選模式再上傳。<br>
-          - <code>資料夾匯入</code>：會讀取符合 <code>產品主目錄/RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/home/*/rawdata</code> 的 .TXT（例如：<code>FAG112/RW_CP1_65296Z600_01_S1P1_20260112181636/home/winbond/rawdata</code>）<br>
+          - <code>資料夾匯入</code>：會先抓第一層子目錄作為產品名稱，再到該產品下搜尋站點 RAW DATA。<br>
+          - 目錄建議格式（與 README 相同）：<br>
+          <pre><code>資料夾根目錄/
+├─ AAG106/
+│  ├─ RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/
+│  │  └─ home/winbond/rawdata/*.TXT
+│  └─ ...
+├─ EAG119/
+│  ├─ RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/
+│  │  └─ home/winbond/rawdata/*.TXT
+│  └─ ...
+└─ FAG102/
+   └─ RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/
+      └─ home/winbond/rawdata/*.TXT</code></pre>
           - <code>單選 .TXT 檔案</code>：直接解析你選的單一檔案<br>
           ※ 僅分析產品目錄開頭為 <code>FAG/EAG/MAG/AAG/KAG/RAG</code> 的資料夾，其餘會略過<br>
           ※ 掃描後可於「解析範圍勾選」選擇要分析的產品/站點<br>
@@ -2994,8 +3015,8 @@ function stripAiWakeupSection(markdown) {
 async function initializeGuidePage() {
   if (!dom.guideContent) return;
   const sources = [
-    "https://raw.githubusercontent.com/desmondlyu/rawdata_analysis/main/README.md",
     "README.md",
+    "https://raw.githubusercontent.com/desmondlyu/rawdata_analysis/main/README.md",
   ];
   let markdown = "";
   for (const src of sources) {
