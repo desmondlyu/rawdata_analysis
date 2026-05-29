@@ -1990,6 +1990,13 @@ function applyEntryModeUI() {
   updateAnalyzeState();
 }
 
+function stripAiWakeupSection(markdown) {
+  let cleaned = String(markdown || "");
+  cleaned = cleaned.replace(/<!--[\s\S]*?AI SESSION CONTEXT[\s\S]*?-->\s*/gi, "");
+  cleaned = cleaned.replace(/##\s*🤖\s*AI\s*快速喚醒區[\s\S]*?(?=\n##\s+|$)/gi, "");
+  return cleaned.trim();
+}
+
 async function initializeGuidePage() {
   if (!dom.guideContent) return;
   const sources = [
@@ -2008,6 +2015,7 @@ async function initializeGuidePage() {
     }
   }
 
+  markdown = stripAiWakeupSection(markdown);
   if (!markdown.trim()) {
     dom.guideContent.textContent = "無法載入操作說明（README）。";
     return;
