@@ -23,15 +23,15 @@
 資料夾根目錄/
 ├─ AAG106/
 │  ├─ RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/
-│  │  └─ home/winbond/rawdata/*.TXT
+│  │  └─ home/*/rawdata/*.TXT
 │  └─ ...
 ├─ EAG119/
 │  ├─ RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/
-│  │  └─ home/winbond/rawdata/*.TXT
+│  │  └─ home/*/rawdata/*.TXT
 │  └─ ...
 └─ FAG102/
    └─ RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/
-      └─ home/winbond/rawdata/*.TXT
+      └─ home/*/rawdata/*.TXT
 ```
 
 2. 選擇要分析的產品與站點後按「開始分析」。
