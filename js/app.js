@@ -9,12 +9,10 @@ const APP = {
   activeStation: "",
   activeProduct: "",
   activeChartTab: "item",
-  activeReportTab: "item",
   chartSortProduct: "",
   chartFilters: { product: [], process: [], density: [], voltage: [] },
   scenarioOverrides: new Map(),
   groupScenarioOverrides: new Map(),
-  groupTableSort: { key: "mean", dir: "desc" },
   groupingMapByStation: new Map(),
   groupingReady: false,
   enableAnomalyDetail: false,
@@ -28,7 +26,6 @@ const APP = {
   selectedScopes: new Set(),
   charts: {
     count: null, mean: null, range: null, ratio: null, reduction: null,
-    groupReductionFromReport: null,
     groupCount: null, groupMean: null, groupRange: null, groupRatio: null, groupReduction: null,
   },
 };
@@ -80,16 +77,12 @@ const dom = {
   floatingStationTabsToggleBtn: document.getElementById("floating-station-tabs-toggle-btn"),
   kpiToggleBtn: document.getElementById("kpi-toggle-btn"),
   tableProductTabs: document.getElementById("table-product-tabs"),
-  groupTableProductTabs: document.getElementById("group-table-product-tabs"),
   tableToggleBtn: document.getElementById("table-toggle-btn"),
   scenarioResetBtn: document.getElementById("scenario-reset-btn"),
   tableContentItem: document.getElementById("table-content-item"),
-  tableContentGroup: document.getElementById("table-content-group"),
   siteProductTabs: document.getElementById("site-product-tabs"),
   chartTabItem: document.getElementById("chart-tab-item"),
   chartTabGroup: document.getElementById("chart-tab-group"),
-  reportTabItem: document.getElementById("report-tab-item"),
-  reportTabGroup: document.getElementById("report-tab-group"),
   kpiSection: document.getElementById("kpi-section"),
   chartSection: document.getElementById("chart-section"),
   chartSortProduct: document.getElementById("chart-sort-product"),
@@ -107,8 +100,6 @@ const dom = {
   tableSection: document.getElementById("table-section"),
   statsThead: document.getElementById("stats-thead"),
   statsTbody: document.getElementById("stats-tbody"),
-  groupStatsThead: document.getElementById("group-stats-thead"),
-  groupStatsTbody: document.getElementById("group-stats-tbody"),
   siteTdSection: document.getElementById("site-td-section"),
   siteTdHeatmap: document.getElementById("site-td-heatmap"),
 };
@@ -126,13 +117,10 @@ dom.floatingStationTabs?.addEventListener("click", onStationTabClick);
 dom.floatingStationTabsToggleBtn?.addEventListener("click", onFloatingStationTabsToggleClick);
 dom.kpiToggleBtn?.addEventListener("click", onKpiToggleClick);
 dom.tableProductTabs?.addEventListener("click", onProductTabClick);
-dom.groupTableProductTabs?.addEventListener("click", onProductTabClick);
 dom.siteProductTabs?.addEventListener("click", onProductTabClick);
 dom.statsThead?.addEventListener("click", onStatsHeadClick);
 dom.statsTbody?.addEventListener("click", onStatsBodyClick);
 dom.statsTbody?.addEventListener("input", onScenarioInputChange);
-dom.groupStatsThead?.addEventListener("click", onGroupStatsHeadClick);
-dom.groupStatsTbody?.addEventListener("input", onGroupScenarioInputChange);
 dom.chartSortProduct?.addEventListener("change", onChartSortProductChange);
 dom.chartFilterProductBtn?.addEventListener("click", onChartProductFilterToggle);
 dom.chartFilterProductMenu?.addEventListener("change", onChartProductFilterItemChange);
@@ -147,8 +135,6 @@ dom.tableToggleBtn?.addEventListener("click", onTableToggleClick);
 dom.scenarioResetBtn?.addEventListener("click", onScenarioResetClick);
 dom.chartTabItem?.addEventListener("click", () => switchChartTab("item"));
 dom.chartTabGroup?.addEventListener("click", () => switchChartTab("group"));
-dom.reportTabItem?.addEventListener("click", () => switchReportTab("item"));
-dom.reportTabGroup?.addEventListener("click", () => switchReportTab("group"));
 dom.entryTabAnalysis?.addEventListener("click", () => switchEntryPage("analysis"));
 dom.entryTabXlsx?.addEventListener("click", () => switchEntryPage("xlsx"));
 dom.entryTabGuide?.addEventListener("click", () => switchEntryPage("guide"));
@@ -165,7 +151,6 @@ initializeGroupingMapping();
 applyEntryModeUI();
 initializeTheme();
 syncChartTabUI();
-syncReportTabUI();
 syncFloatingStationTabsCollapsedUI();
 
 function applyTheme(theme) {
@@ -221,14 +206,6 @@ function switchChartTab(tab) {
   renderCharts();
 }
 
-function switchReportTab(tab) {
-  if (tab !== "item" && tab !== "group") return;
-  APP.activeReportTab = tab;
-  syncReportTabUI();
-  syncTableCollapsedUI();
-  renderTable();
-}
-
 function syncChartTabUI() {
   const isItem = APP.activeChartTab === "item";
   if (dom.chartTabItem) {
@@ -238,18 +215,6 @@ function syncChartTabUI() {
   if (dom.chartTabGroup) {
     dom.chartTabGroup.setAttribute("aria-selected", isItem ? "false" : "true");
     dom.chartTabGroup.classList.toggle("is-active", !isItem);
-  }
-}
-
-function syncReportTabUI() {
-  const isItem = APP.activeReportTab === "item";
-  if (dom.reportTabItem) {
-    dom.reportTabItem.setAttribute("aria-selected", isItem ? "true" : "false");
-    dom.reportTabItem.classList.toggle("is-active", isItem);
-  }
-  if (dom.reportTabGroup) {
-    dom.reportTabGroup.setAttribute("aria-selected", isItem ? "false" : "true");
-    dom.reportTabGroup.classList.toggle("is-active", !isItem);
   }
 }
 
@@ -566,11 +531,8 @@ function resetResultsUI() {
   APP.chartSortProduct = "";
   APP.chartFilters = { product: [], process: [], density: [], voltage: [] };
   APP.scenarioOverrides.clear();
-  APP.groupScenarioOverrides.clear();
   APP.tableExpanded.clear();
   APP.activeChartTab = "item";
-  APP.activeReportTab = "item";
-  APP.groupTableSort = { key: "mean", dir: "desc" };
   APP.tableCollapsed = true;
   APP.scopeCollapsed = false;
   APP.kpiCollapsed = false;
@@ -587,7 +549,6 @@ function resetResultsUI() {
   if (dom.stationTabs) dom.stationTabs.innerHTML = "";
   if (dom.floatingStationTabs) dom.floatingStationTabs.innerHTML = "";
   if (dom.tableProductTabs) dom.tableProductTabs.innerHTML = "";
-  if (dom.groupTableProductTabs) dom.groupTableProductTabs.innerHTML = "";
   if (dom.siteProductTabs) dom.siteProductTabs.innerHTML = "";
   if (dom.chartSortProduct) dom.chartSortProduct.innerHTML = "";
   if (dom.chartFilterProductBtn) dom.chartFilterProductBtn.textContent = "全部產品";
@@ -599,11 +560,9 @@ function resetResultsUI() {
   if (dom.chartFilterVoltageBtn) dom.chartFilterVoltageBtn.textContent = "全部 Voltage";
   if (dom.chartFilterVoltageMenu) dom.chartFilterVoltageMenu.innerHTML = "";
   dom.statsTbody.innerHTML = "";
-  if (dom.groupStatsTbody) dom.groupStatsTbody.innerHTML = "";
   dom.progressWrap.classList.add("hidden");
   setProgress(0);
   syncChartTabUI();
-  syncReportTabUI();
   syncTableCollapsedUI();
   syncKpiCollapsedUI();
   syncChartCollapsedUI();
@@ -625,8 +584,7 @@ function resetResultsUI() {
 
 function syncTableCollapsedUI() {
   if (!dom.tableToggleBtn) return;
-  dom.tableContentItem?.classList.toggle("hidden", APP.tableCollapsed || APP.activeReportTab !== "item");
-  dom.tableContentGroup?.classList.toggle("hidden", APP.tableCollapsed || APP.activeReportTab !== "group");
+  dom.tableContentItem?.classList.toggle("hidden", APP.tableCollapsed);
   dom.tableToggleBtn.textContent = APP.tableCollapsed ? "展開全部" : "收合全部";
   dom.tableToggleBtn.setAttribute("aria-expanded", APP.tableCollapsed ? "false" : "true");
 }
@@ -1472,7 +1430,6 @@ function renderStationTabHost(host, stationNames) {
 function renderProductTabs() {
   const productsInStation = getProductsInStation(APP.activeStation);
   syncProductTabHost(dom.tableProductTabs, productsInStation);
-  syncProductTabHost(dom.groupTableProductTabs, productsInStation);
   syncProductTabHost(dom.siteProductTabs, productsInStation);
 }
 
@@ -1611,39 +1568,8 @@ function onScenarioInputChange(event) {
   renderCharts();
 }
 
-function onGroupScenarioInputChange(event) {
-  const input = event.target;
-  if (!(input instanceof HTMLInputElement)) return;
-  if (!input.matches("[data-group-scenario-field]")) return;
-  const field = input.getAttribute("data-group-scenario-field");
-  const stationName = input.getAttribute("data-group-scenario-station");
-  const productName = input.getAttribute("data-group-scenario-product");
-  const groupName = input.getAttribute("data-group-scenario-name");
-  if (!field || !stationName || !productName || !groupName) return;
-  const groupStats = buildGroupStats(productName, stationName);
-  const stat = groupStats.find((entry) => entry.group === groupName);
-  if (!stat || (field !== "mean" && field !== "range")) return;
-  const next = Number.parseFloat(input.value);
-  applyGroupScenarioOverride(productName, stationName, groupName, field, next, stat[field]);
-  syncGroupScenarioCells();
-  if (APP.activeChartTab === "item") {
-    if (APP.charts.groupReductionFromReport) {
-      APP.charts.groupReductionFromReport.destroy();
-      APP.charts.groupReductionFromReport = null;
-    }
-    APP.charts.groupReductionFromReport = renderGroupStationReductionChart(
-      "group-sim-tt-reduction-chart",
-      "Scenario vs Baseline（來源：群組化報表模擬；By 產品；全部站點合計）",
-      { requireOverrides: true },
-    );
-  } else {
-    renderCharts();
-  }
-}
-
 function onScenarioResetClick() {
   APP.scenarioOverrides.clear();
-  APP.groupScenarioOverrides.clear();
   renderTable();
   renderCharts();
 }
@@ -1898,18 +1824,18 @@ function getItemRatioScenarioTotal(productName, stationName) {
   }, 0);
 }
 
-function getScenarioTtRatio(stat, productName, stationName, scenarioStationTotal = null) {
-  const stationTotal = Number.isFinite(scenarioStationTotal) ? scenarioStationTotal : getItemRatioScenarioTotal(productName, stationName);
+function getScenarioTtRatio(stat, productName, stationName, ratioBaseTotal = null) {
+  const stationTotal = Number.isFinite(ratioBaseTotal) ? ratioBaseTotal : getItemRatioBaseTotal(productName, stationName);
   if (!Number.isFinite(stationTotal) || stationTotal <= 0) return 0;
   return (getScenarioEffectiveMean(stat, productName, stationName) * stat.count / stationTotal) * 100;
 }
 
-function metricValueWithScenario(stat, metric, productName, stationName, scenarioStationTotal = null) {
+function metricValueWithScenario(stat, metric, productName, stationName, ratioBaseTotal = null) {
   if (!stat) return 0;
   if (metric === "count") return stat.count;
   if (metric === "mean") return Number(getScenarioMean(stat, productName, stationName).toFixed(6));
   if (metric === "range") return Number(getScenarioRange(stat, productName, stationName).toFixed(6));
-  return Number(getScenarioTtRatio(stat, productName, stationName, scenarioStationTotal).toFixed(6));
+  return Number(getScenarioTtRatio(stat, productName, stationName, ratioBaseTotal).toFixed(6));
 }
 
 function sortStats(stats, sortKey, sortDir) {
@@ -1988,6 +1914,50 @@ function buildGroupStats(productName, stationName) {
       };
     })
     .sort((a, b) => (b.mean !== a.mean ? b.mean - a.mean : a.group.localeCompare(b.group)));
+}
+
+function buildGroupedItemRows(stats, productName, stationName, ratioBaseTotal) {
+  const groupMap = new Map();
+  for (const stat of stats) {
+    const groupName = resolveGroupName(stationName, stat.testItem);
+    const row = groupMap.get(groupName) || {
+      group: groupName,
+      items: [],
+      count: 0,
+      baseTotal: 0,
+      scenarioTotal: 0,
+      min: Number.POSITIVE_INFINITY,
+      minSite: "Unknown",
+      minTd: "Unknown",
+      max: Number.NEGATIVE_INFINITY,
+      maxSite: "Unknown",
+      maxTd: "Unknown",
+    };
+    row.items.push(stat);
+    row.count += stat.count;
+    row.baseTotal += stat.mean * stat.count;
+    row.scenarioTotal += getScenarioEffectiveMean(stat, productName, stationName) * stat.count;
+    if (stat.min < row.min) {
+      row.min = stat.min;
+      row.minSite = stat.minSite;
+      row.minTd = stat.minTd;
+    }
+    if (stat.max > row.max) {
+      row.max = stat.max;
+      row.maxSite = stat.maxSite;
+      row.maxTd = stat.maxTd;
+    }
+    groupMap.set(groupName, row);
+  }
+  return Array.from(groupMap.values())
+    .map((row) => ({
+      ...row,
+      ttRatio: ratioBaseTotal > 0 ? (row.baseTotal / ratioBaseTotal) * 100 : 0,
+      scenarioTtRatio: ratioBaseTotal > 0 ? (row.scenarioTotal / ratioBaseTotal) * 100 : 0,
+      min: Number.isFinite(row.min) ? row.min : 0,
+      max: Number.isFinite(row.max) ? row.max : 0,
+    }))
+    .sort((a, b) => (b.baseTotal !== a.baseTotal ? b.baseTotal - a.baseTotal : a.group.localeCompare(b.group)));
 }
 
 function makeGroupScenarioOverrideKey(productName, stationName, groupName) {
@@ -2089,38 +2059,62 @@ function renderItemTable() {
     ttRatio: getItemBaseTtRatio(s, product.name, station.name, baseRatioTotal),
   }));
   const sorted = sortStats(statsWithComputedRatio, APP.tableSort.key, APP.tableSort.dir);
-  const scenarioStationTotal = getItemRatioScenarioTotal(product.name, station.name);
-  dom.statsTbody.innerHTML = sorted
-    .map((s) => {
-      const rowKey = makeTableExpandKey(station.name, s.testItem);
-      const canExpand = Boolean(s.maxDetailLine);
-      const expanded = APP.tableExpanded.has(rowKey);
-      const scenarioMean = getScenarioMean(s, product.name, station.name);
-      const scenarioRange = getScenarioRange(s, product.name, station.name);
-      const scenarioRatio = getScenarioTtRatio(s, product.name, station.name, scenarioStationTotal);
-      const baseRow = `
-      <tr data-scenario-row="true" data-scenario-item="${escapeHtml(s.testItem)}">
-        <td class="expand-cell">${APP.enableAnomalyDetail && canExpand ? `<button type="button" class="expand-btn" data-expand-key="${escapeHtml(rowKey)}" aria-expanded="${expanded ? "true" : "false"}">${expanded ? "−" : "+"}</button>` : ""}</td>
-        <td title="${escapeHtml(s.testItem)}">${escapeHtml(s.testItem)}</td>
-        <td>${s.count}</td>
-        <td>${fmt(s.mean)}</td>
-        <td>${fmt(s.median)}</td>
-        <td>${fmt(s.range)}</td>
-        <td>${fmt(s.ttRatio)}</td>
-        <td><input type="number" min="0" step="0.000001" class="scenario-input" data-scenario-field="mean" data-scenario-product="${escapeHtml(product.name)}" data-scenario-station="${escapeHtml(station.name)}" data-scenario-item="${escapeHtml(s.testItem)}" value="${escapeHtml(fmt(scenarioMean))}"></td>
-        <td><input type="number" min="0" step="0.000001" class="scenario-input" data-scenario-field="range" data-scenario-product="${escapeHtml(product.name)}" data-scenario-station="${escapeHtml(station.name)}" data-scenario-item="${escapeHtml(s.testItem)}" value="${escapeHtml(fmt(scenarioRange))}"></td>
-        <td data-scenario-tt-ratio="true">${fmt(scenarioRatio)}</td>
-        <td>${fmt(s.min)}</td>
-        <td>${escapeHtml(formatSiteTdSource(s.minSite, s.minTd))}</td>
-        <td>${fmt(s.max)}</td>
-        <td>${escapeHtml(formatSiteTdSource(s.maxSite, s.maxTd))}</td>
+  const ratioBaseTotal = baseRatioTotal;
+  const groupedRows = buildGroupedItemRows(sorted, product.name, station.name, ratioBaseTotal);
+  dom.statsTbody.innerHTML = groupedRows
+    .map((group) => {
+      const groupKey = makeGroupExpandKey(station.name, group.group);
+      const groupExpanded = APP.tableExpanded.has(groupKey);
+      const groupRow = `
+      <tr class="group-row" data-group-row="true" data-group-name="${escapeHtml(group.group)}">
+        <td class="expand-cell"><button type="button" class="expand-btn" data-expand-key="${escapeHtml(groupKey)}" aria-expanded="${groupExpanded ? "true" : "false"}">${groupExpanded ? "−" : "+"}</button></td>
+        <td title="${escapeHtml(group.group)}"><strong>Group｜${escapeHtml(group.group)}</strong></td>
+        <td>${group.count}</td>
+        <td>${fmt(group.baseTotal)}</td>
+        <td>-</td>
+        <td>-</td>
+        <td>${fmt(group.ttRatio)}</td>
+        <td>-</td>
+        <td>-</td>
+        <td data-group-scenario-tt-ratio="true">${fmt(group.scenarioTtRatio)}</td>
+        <td>${fmt(group.min)}</td>
+        <td>${escapeHtml(formatSiteTdSource(group.minSite, group.minTd))}</td>
+        <td>${fmt(group.max)}</td>
+        <td>${escapeHtml(formatSiteTdSource(group.maxSite, group.maxTd))}</td>
       </tr>`;
-      if (!(APP.enableAnomalyDetail && canExpand && expanded)) return baseRow;
-      return `${baseRow}
-      <tr class="detail-row">
-        <td></td>
-        <td colspan="13" class="detail-cell"><code>${escapeHtml(s.maxDetailLine)}</code></td>
-      </tr>`;
+      if (!groupExpanded) return groupRow;
+      const children = group.items.map((s) => {
+        const rowKey = makeTableExpandKey(station.name, s.testItem);
+        const canExpand = Boolean(s.maxDetailLine);
+        const expanded = APP.tableExpanded.has(rowKey);
+        const scenarioMean = getScenarioMean(s, product.name, station.name);
+        const scenarioRange = getScenarioRange(s, product.name, station.name);
+        const scenarioRatio = getScenarioTtRatio(s, product.name, station.name, ratioBaseTotal);
+        const baseRow = `
+        <tr class="group-child-row" data-scenario-row="true" data-scenario-item="${escapeHtml(s.testItem)}">
+          <td class="expand-cell">${APP.enableAnomalyDetail && canExpand ? `<button type="button" class="expand-btn" data-expand-key="${escapeHtml(rowKey)}" aria-expanded="${expanded ? "true" : "false"}">${expanded ? "−" : "+"}</button>` : ""}</td>
+          <td title="${escapeHtml(s.testItem)}"><span class="group-child-label">└─ ${escapeHtml(s.testItem)}</span></td>
+          <td>${s.count}</td>
+          <td>${fmt(s.mean)}</td>
+          <td>${fmt(s.median)}</td>
+          <td>${fmt(s.range)}</td>
+          <td>${fmt(s.ttRatio)}</td>
+          <td><input type="number" min="0" step="0.000001" class="scenario-input" data-scenario-field="mean" data-scenario-product="${escapeHtml(product.name)}" data-scenario-station="${escapeHtml(station.name)}" data-scenario-item="${escapeHtml(s.testItem)}" value="${escapeHtml(fmt(scenarioMean))}"></td>
+          <td><input type="number" min="0" step="0.000001" class="scenario-input" data-scenario-field="range" data-scenario-product="${escapeHtml(product.name)}" data-scenario-station="${escapeHtml(station.name)}" data-scenario-item="${escapeHtml(s.testItem)}" value="${escapeHtml(fmt(scenarioRange))}"></td>
+          <td data-scenario-tt-ratio="true">${fmt(scenarioRatio)}</td>
+          <td>${fmt(s.min)}</td>
+          <td>${escapeHtml(formatSiteTdSource(s.minSite, s.minTd))}</td>
+          <td>${fmt(s.max)}</td>
+          <td>${escapeHtml(formatSiteTdSource(s.maxSite, s.maxTd))}</td>
+        </tr>`;
+        if (!(APP.enableAnomalyDetail && canExpand && expanded)) return baseRow;
+        return `${baseRow}
+        <tr class="detail-row">
+          <td></td>
+          <td colspan="13" class="detail-cell"><code>${escapeHtml(s.maxDetailLine)}</code></td>
+        </tr>`;
+      }).join("");
+      return `${groupRow}${children}`;
     })
     .join("");
   renderSortHeaderState();
@@ -2169,11 +2163,6 @@ function renderGroupTable() {
 }
 
 function renderTable() {
-  syncReportTabUI();
-  if (APP.activeReportTab === "group") {
-    renderGroupTable();
-    return;
-  }
   renderItemTable();
 }
 
@@ -2182,7 +2171,7 @@ function syncScenarioCells() {
   const station = getActiveStationData();
   if (!product || !station || !dom.statsTbody) return;
   const statMap = new Map(station.stats.map((s) => [s.testItem, s]));
-  const scenarioStationTotal = getItemRatioScenarioTotal(product.name, station.name);
+  const ratioBaseTotal = getItemRatioBaseTotal(product.name, station.name);
   const rows = dom.statsTbody.querySelectorAll("tr[data-scenario-row='true']");
   for (const row of rows) {
     const item = row.getAttribute("data-scenario-item");
@@ -2190,7 +2179,17 @@ function syncScenarioCells() {
     const stat = statMap.get(item);
     if (!stat) continue;
     const ratioCell = row.querySelector("[data-scenario-tt-ratio='true']");
-    if (ratioCell) ratioCell.textContent = fmt(getScenarioTtRatio(stat, product.name, station.name, scenarioStationTotal));
+    if (ratioCell) ratioCell.textContent = fmt(getScenarioTtRatio(stat, product.name, station.name, ratioBaseTotal));
+  }
+  const groupedRows = buildGroupedItemRows(station.stats, product.name, station.name, ratioBaseTotal);
+  const groupedMap = new Map(groupedRows.map((row) => [row.group, row]));
+  const groupRows = dom.statsTbody.querySelectorAll("tr[data-group-row='true']");
+  for (const row of groupRows) {
+    const groupName = row.getAttribute("data-group-name");
+    if (!groupName) continue;
+    const group = groupedMap.get(groupName);
+    const ratioCell = row.querySelector("[data-group-scenario-tt-ratio='true']");
+    if (ratioCell) ratioCell.textContent = fmt(group?.scenarioTtRatio || 0);
   }
 }
 
@@ -2688,11 +2687,6 @@ function renderCharts() {
     APP.charts.range = renderMetricChart("range-chart", "range", "Range (s)", "#f59e0b");
     APP.charts.ratio = renderMetricChart("tt-ratio-chart", "ttRatio", "TT Ratio/站點 (%)", "#a855f7");
     APP.charts.reduction = renderStationReductionChart();
-    APP.charts.groupReductionFromReport = renderGroupStationReductionChart(
-      "group-sim-tt-reduction-chart",
-      "Scenario vs Baseline（來源：群組化報表模擬；By 產品；全部站點合計）",
-      { requireOverrides: true },
-    );
   }
   dom.chartSection.classList.remove("hidden");
 }
@@ -2887,6 +2881,10 @@ function parseTestTimeLineMeta(line) {
 
 function makeTableExpandKey(stationName, testItem) {
   return `${String(stationName || "").trim()}||${String(testItem || "").trim()}`;
+}
+
+function makeGroupExpandKey(stationName, groupName) {
+  return `group||${String(stationName || "").trim()}||${String(groupName || "").trim()}`;
 }
 
 function extractMaxDetailRawLine(maxRecord) {

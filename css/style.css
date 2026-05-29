@@ -648,6 +648,7 @@ body.theme-light .meta-input,
 body.theme-light .chart-sort-select,
 body.theme-light .expand-btn,
 body.theme-light .detail-row td,
+body.theme-light .group-row td,
 body.theme-light .heatmap-wrap,
 body.theme-light .heatmap-grid th,
 body.theme-light .heatmap-site-label,
@@ -655,6 +656,10 @@ body.theme-light .stat-table th {
   background: #f8fafc;
   border-color: #cbd5e1;
   color: #0f172a;
+}
+
+body.theme-light .group-child-label {
+  color: #1d4ed8;
 }
 
 .kpi-react-fill {
@@ -1143,6 +1148,15 @@ body.theme-light .sort-btn {
 
 .detail-row td {
   background: #0b1220;
+}
+
+.group-row td {
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.group-child-label {
+  padding-left: 0.35rem;
+  color: #bfdbfe;
 }
 
 .detail-cell {
