@@ -14,6 +14,7 @@ const APP = {
   tableSort: { key: "mean", dir: "desc" },
   tableExpanded: new Set(),
   tableCollapsed: true,
+  scopeCollapsed: false,
   kpiCollapsed: false,
   chartCollapsed: false,
   selectedScopes: new Set(),
@@ -46,6 +47,7 @@ const dom = {
   scopeSelectList: document.getElementById("scope-select-list"),
   scopeSelectAll: document.getElementById("scope-select-all"),
   scopeSelectNone: document.getElementById("scope-select-none"),
+  scopeToggleBtn: document.getElementById("scope-toggle-btn"),
   entryTabAnalysis: document.getElementById("entry-tab-analysis"),
   entryTabXlsx: document.getElementById("entry-tab-xlsx"),
   entryTabGuide: document.getElementById("entry-tab-guide"),
@@ -110,6 +112,7 @@ dom.themeToggleBtn?.addEventListener("click", onThemeToggleClick);
 dom.scopeSelectList?.addEventListener("change", onScopeSelectionChange);
 dom.scopeSelectAll?.addEventListener("click", () => toggleAllScopes(true));
 dom.scopeSelectNone?.addEventListener("click", () => toggleAllScopes(false));
+dom.scopeToggleBtn?.addEventListener("click", onScopeToggleClick);
 dom.folderMeta?.addEventListener("input", onMetaInputChange);
 
 initializeGuidePage();
@@ -384,6 +387,7 @@ function renderScopeSelection() {
   const totalStations = getSelectableStationEntries().length;
   const selectedFiles = getSelectedRawTxtCount();
   dom.scopeSelectSummary.textContent = `目前已勾選 ${selectedStations}/${totalStations} 個站點，共 ${selectedFiles} 個 .TXT 檔案。`;
+  syncScopeCollapsedUI();
 }
 
 function onScopeSelectionChange(event) {
@@ -416,6 +420,18 @@ function toggleAllScopes(checked) {
   updateAnalyzeState();
 }
 
+function syncScopeCollapsedUI() {
+  if (!dom.scopeSelectList || !dom.scopeToggleBtn) return;
+  dom.scopeSelectList.classList.toggle("hidden", APP.scopeCollapsed);
+  dom.scopeToggleBtn.textContent = APP.scopeCollapsed ? "展開全部" : "收合全部";
+  dom.scopeToggleBtn.setAttribute("aria-expanded", APP.scopeCollapsed ? "false" : "true");
+}
+
+function onScopeToggleClick() {
+  APP.scopeCollapsed = !APP.scopeCollapsed;
+  syncScopeCollapsedUI();
+}
+
 function hasAnalyzedData() {
   for (const product of getProducts()) {
     for (const station of product.stations.values()) {
@@ -438,6 +454,7 @@ function resetResultsUI() {
   APP.chartFilters = { product: "__all__", process: "", density: "", voltage: "" };
   APP.tableExpanded.clear();
   APP.tableCollapsed = true;
+  APP.scopeCollapsed = false;
   APP.kpiCollapsed = false;
   APP.chartCollapsed = false;
 

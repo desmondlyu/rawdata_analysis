@@ -347,11 +347,23 @@ body.theme-light .source-mode-option {
   display: inline-flex;
   gap: 0.4rem;
   flex-wrap: wrap;
+  margin-left: auto;
 }
 
 .scope-select-list {
   display: grid;
   gap: 0.56rem;
+}
+
+.scope-select-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.scope-select-toolbar #scope-select-summary {
+  margin: 0;
 }
 
 .scope-product-card {
