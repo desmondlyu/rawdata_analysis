@@ -1292,7 +1292,7 @@ body.theme-light .msg-error {
 }
 
 .heatmap-wrap {
-  overflow: auto;
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 0.8rem;
   background: #0b1220;
@@ -1344,6 +1344,54 @@ body.theme-light .msg-error {
   gap: 0.6rem;
 }
 
+.heatmap-board-shell {
+  width: 100%;
+  height: clamp(320px, 42vh, 430px);
+  border: 1px solid #1e293b;
+  border-radius: 0.7rem;
+  background: #0b1220;
+  padding: 0.3rem;
+}
+
+.heatmap-board {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  gap: 1px;
+  background: #1e293b;
+}
+
+.heatmap-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+  padding: 0 0.15rem;
+}
+
+.heatmap-corner,
+.heatmap-head-cell,
+.heatmap-side-cell {
+  background: #111827;
+  color: #cbd5e1;
+  font-weight: 700;
+}
+
+.heatmap-side-cell {
+  justify-content: flex-start;
+  padding-left: 0.42rem;
+}
+
+.heatmap-value-cell {
+  color: #f8fafc;
+  font-weight: 700;
+}
+
 .heatmap-pager {
   display: flex;
   align-items: center;
@@ -1371,6 +1419,22 @@ body.theme-light .pager-btn {
   background: #f8fafc;
   color: #0f172a;
   border-color: #94a3b8;
+}
+
+body.theme-light .heatmap-board-shell {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+body.theme-light .heatmap-board {
+  background: #cbd5e1;
+}
+
+body.theme-light .heatmap-corner,
+body.theme-light .heatmap-head-cell,
+body.theme-light .heatmap-side-cell {
+  background: #f1f5f9;
+  color: #0f172a;
 }
 
 .pager-btn:disabled {

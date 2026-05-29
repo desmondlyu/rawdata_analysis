@@ -77,49 +77,55 @@
     return { tdLabels, siteLabels, matrix, maxValue };
   }
 
-  function HeatmapTable(props) {
+  function HeatmapBoard(props) {
     const tdLabels = props.tdLabels;
     const siteEntries = props.siteEntries;
     const matrix = props.matrix;
     const maxValue = props.maxValue;
+    const colCount = Math.max(1, siteEntries.length);
+    const rowCount = Math.max(1, tdLabels.length);
+    const gridStyle = {
+      gridTemplateColumns: "92px repeat(" + String(colCount) + ", minmax(0, 1fr))",
+      gridTemplateRows: "40px repeat(" + String(rowCount) + ", minmax(0, 1fr))",
+    };
+    const cells = [];
+
+    cells.push(e("div", { key: "corner", className: "heatmap-cell heatmap-corner" }, "TD \\ SITE"));
+
+    for (const entry of siteEntries) {
+      cells.push(
+        e(
+          "div",
+          { key: "th-site-" + entry.site, className: "heatmap-cell heatmap-head-cell" },
+          formatSiteLabel(entry.site),
+        ),
+      );
+    }
+
+    tdLabels.forEach(function renderTdRow(td, tdIndex) {
+      cells.push(
+        e("div", { key: "th-td-" + td, className: "heatmap-cell heatmap-side-cell" }, formatTdLabel(td)),
+      );
+
+      siteEntries.forEach(function renderCell(entry) {
+        const site = entry.site;
+        const value = matrix[entry.siteIndex][tdIndex];
+        const style = { background: getHeatColor(value, maxValue) };
+        const title = "TD " + formatTdLabel(td) + ", SITE " + formatSiteLabel(site) + ": " + value.toFixed(3) + " s";
+        cells.push(
+          e(
+            "div",
+            { key: "cell-td-" + td + "-site-" + site, className: "heatmap-cell heatmap-value-cell", style: style, title: title },
+            value > 0 ? value.toFixed(1) : "-",
+          ),
+        );
+      });
+    });
 
     return e(
-      "table",
-      { className: "heatmap-grid" },
-      e(
-        "thead",
-        null,
-        e(
-          "tr",
-          null,
-          e("th", null, "TD \\ SITE"),
-          siteEntries.map(function renderSiteHeader(entry) {
-            return e("th", { key: "th-site-" + entry.site }, formatSiteLabel(entry.site));
-          }),
-        ),
-      ),
-      e(
-        "tbody",
-        null,
-        tdLabels.map(function renderRow(td, tdIndex) {
-          return e(
-            "tr",
-            { key: "row-td-" + td },
-            e("td", { className: "heatmap-site-label" }, formatTdLabel(td)),
-            siteEntries.map(function renderCell(entry) {
-              const site = entry.site;
-              const value = matrix[entry.siteIndex][tdIndex];
-              const style = { background: getHeatColor(value, maxValue) };
-              const title = "TD " + formatTdLabel(td) + ", SITE " + formatSiteLabel(site) + ": " + value.toFixed(3) + " s";
-              return e(
-                "td",
-                { key: "cell-td-" + td + "-site-" + site, className: "heat-cell", style: style, title: title },
-                value > 0 ? value.toFixed(1) : "-",
-              );
-            }),
-          );
-        }),
-      ),
+      "div",
+      { className: "heatmap-board-shell" },
+      e("div", { className: "heatmap-board", style: gridStyle }, cells),
     );
   }
 
@@ -190,7 +196,7 @@
           "下一頁 →",
         ),
       ),
-      e(HeatmapTable, {
+      e(HeatmapBoard, {
         tdLabels: props.tdLabels,
         siteEntries: siteEntries,
         matrix: props.matrix,
