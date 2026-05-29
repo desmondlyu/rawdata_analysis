@@ -24,6 +24,7 @@ const APP = {
   chartCollapsed: false,
   floatingStationTabsCollapsed: false,
   selectedScopes: new Set(),
+  importedDashboardState: null,
   charts: {
     count: null, mean: null, range: null, ratio: null, reduction: null, ratioByGroup: null,
     groupCount: null, groupMean: null, groupRange: null, groupRatio: null, groupReduction: null,
@@ -531,6 +532,8 @@ function resetResultsUI() {
   APP.chartSortProduct = "";
   APP.chartFilters = { product: [], process: [], density: [], voltage: [] };
   APP.scenarioOverrides.clear();
+  APP.groupScenarioOverrides.clear();
+  APP.importedDashboardState = null;
   APP.tableExpanded.clear();
   APP.activeChartTab = "item";
   APP.tableCollapsed = true;
@@ -1168,6 +1171,7 @@ async function startAnalysisFromXlsx() {
 
   APP.activeStation = stationNames[0];
   syncActiveProductForStation();
+  applyImportedDashboardState(stationNames);
   renderMeta(buildMetaCards());
   renderStationTabs(stationNames);
   renderProductTabs();
@@ -1182,8 +1186,10 @@ async function startAnalysisFromXlsx() {
 }
 
 function importWorkbookData(workbook) {
+  const importedState = parseDashboardState(workbook);
+  if (importedState && !APP.importedDashboardState) APP.importedDashboardState = importedState;
   const summaryEntries = parseSummaryEntries(workbook);
-  const dataSheets = workbook.SheetNames.filter((name) => name !== "Summary");
+  const dataSheets = workbook.SheetNames.filter((name) => name !== "Summary" && name !== "Dashboard_State");
   const statsSheets = [];
   const siteSheets = [];
 
@@ -1212,7 +1218,10 @@ function importWorkbookData(workbook) {
     station.parsedMeta = parsedMeta;
 
     const statRows = statsSheets[idx]?.rows ?? [];
-    if (statRows.length > 1) station.stats = parseStatsRows(statRows);
+    if (statRows.length > 1) {
+      station.stats = parseStatsRows(statRows);
+      mergeImportedGroupingFromStats(station.name, station.stats);
+    }
 
     const siteRows = siteSheets[idx]?.rows ?? [];
     if (siteRows.length > 1) station.siteTdMap = parseSiteTdRows(siteRows);
@@ -1297,6 +1306,174 @@ function parseEntryFromSheetName(sheetName) {
   return { product: m[1], station: m[2] };
 }
 
+function parseDashboardState(workbook) {
+  const sheet = workbook?.Sheets?.Dashboard_State;
+  if (!sheet) return null;
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
+  if (!Array.isArray(rows) || rows.length < 2) return null;
+  for (let i = 1; i < rows.length; i += 1) {
+    const row = rows[i] ?? [];
+    const key = String(row[0] ?? "").trim();
+    if (key !== "DashboardState") continue;
+    const raw = String(row[1] ?? "").trim();
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function buildDashboardStateSnapshot() {
+  return {
+    version: 1,
+    activeStation: APP.activeStation,
+    activeProduct: APP.activeProduct,
+    activeChartTab: APP.activeChartTab,
+    chartSortProduct: APP.chartSortProduct,
+    chartFilters: {
+      product: Array.isArray(APP.chartFilters.product) ? [...APP.chartFilters.product] : [],
+      process: Array.isArray(APP.chartFilters.process) ? [...APP.chartFilters.process] : [],
+      density: Array.isArray(APP.chartFilters.density) ? [...APP.chartFilters.density] : [],
+      voltage: Array.isArray(APP.chartFilters.voltage) ? [...APP.chartFilters.voltage] : [],
+    },
+    tableSort: {
+      key: APP.tableSort?.key || "mean",
+      dir: APP.tableSort?.dir === "asc" ? "asc" : "desc",
+    },
+    tableExpanded: Array.from(APP.tableExpanded.values()),
+    tableCollapsed: Boolean(APP.tableCollapsed),
+    scopeCollapsed: Boolean(APP.scopeCollapsed),
+    kpiCollapsed: Boolean(APP.kpiCollapsed),
+    chartCollapsed: Boolean(APP.chartCollapsed),
+    floatingStationTabsCollapsed: Boolean(APP.floatingStationTabsCollapsed),
+    selectedScopes: Array.from(APP.selectedScopes.values()),
+    enableAnomalyDetail: Boolean(APP.enableAnomalyDetail),
+    scenarioOverrides: serializeOverrideMap(APP.scenarioOverrides),
+    groupScenarioOverrides: serializeOverrideMap(APP.groupScenarioOverrides),
+  };
+}
+
+function serializeOverrideMap(mapObj) {
+  if (!(mapObj instanceof Map)) return [];
+  return Array.from(mapObj.entries()).map(([key, payload]) => {
+    const mean = Number(payload?.mean);
+    const range = Number(payload?.range);
+    return [
+      String(key || "").trim(),
+      {
+        mean: Number.isFinite(mean) ? mean : null,
+        range: Number.isFinite(range) ? range : null,
+      },
+    ];
+  });
+}
+
+function deserializeOverrideMap(rawEntries) {
+  const mapObj = new Map();
+  if (!Array.isArray(rawEntries)) return mapObj;
+  for (const pair of rawEntries) {
+    if (!Array.isArray(pair) || pair.length < 2) continue;
+    const key = String(pair[0] || "").trim();
+    if (!key) continue;
+    const payload = pair[1] ?? {};
+    const mean = Number(payload?.mean);
+    const range = Number(payload?.range);
+    const next = {};
+    if (Number.isFinite(mean) && mean >= 0) next.mean = mean;
+    if (Number.isFinite(range) && range >= 0) next.range = range;
+    if (Object.keys(next).length > 0) mapObj.set(key, next);
+  }
+  return mapObj;
+}
+
+function applyImportedDashboardState(stationNames) {
+  const state = APP.importedDashboardState;
+  APP.importedDashboardState = null;
+  if (!state || typeof state !== "object") return;
+
+  const availableStations = new Set((Array.isArray(stationNames) ? stationNames : []).map((v) => String(v || "").trim()).filter(Boolean));
+  const requestedStation = String(state.activeStation || "").trim();
+  if (requestedStation && availableStations.has(requestedStation)) APP.activeStation = requestedStation;
+
+  syncActiveProductForStation();
+  const productsInStation = getProductsInStation(APP.activeStation);
+  const productNames = new Set(productsInStation.map((p) => p.name));
+
+  const requestedProduct = String(state.activeProduct || "").trim();
+  if (requestedProduct && productNames.has(requestedProduct)) APP.activeProduct = requestedProduct;
+
+  const requestedSortProduct = String(state.chartSortProduct || "").trim();
+  if (requestedSortProduct && productNames.has(requestedSortProduct)) APP.chartSortProduct = requestedSortProduct;
+
+  APP.activeChartTab = state.activeChartTab === "group" ? "group" : "item";
+  APP.tableSort = normalizeImportedTableSort(state.tableSort);
+  APP.tableExpanded = normalizeImportedExpandedKeys(state.tableExpanded);
+  APP.chartFilters = normalizeImportedChartFilters(state.chartFilters, productsInStation);
+  APP.selectedScopes = normalizeStringSet(state.selectedScopes);
+
+  APP.tableCollapsed = parseBooleanOrDefault(state.tableCollapsed, APP.tableCollapsed);
+  APP.scopeCollapsed = parseBooleanOrDefault(state.scopeCollapsed, APP.scopeCollapsed);
+  APP.kpiCollapsed = parseBooleanOrDefault(state.kpiCollapsed, APP.kpiCollapsed);
+  APP.chartCollapsed = parseBooleanOrDefault(state.chartCollapsed, APP.chartCollapsed);
+  APP.floatingStationTabsCollapsed = parseBooleanOrDefault(state.floatingStationTabsCollapsed, APP.floatingStationTabsCollapsed);
+  APP.enableAnomalyDetail = parseBooleanOrDefault(state.enableAnomalyDetail, APP.enableAnomalyDetail);
+  if (dom.anomalyDetailToggle) dom.anomalyDetailToggle.checked = APP.enableAnomalyDetail;
+
+  APP.scenarioOverrides = deserializeOverrideMap(state.scenarioOverrides);
+  APP.groupScenarioOverrides = deserializeOverrideMap(state.groupScenarioOverrides);
+
+  syncActiveProductForStation();
+}
+
+function normalizeImportedTableSort(rawSort) {
+  const allowed = new Set(["testItem", "count", "mean", "median", "range", "ttRatio", "min", "max"]);
+  const key = String(rawSort?.key || "mean").trim();
+  const dir = rawSort?.dir === "asc" ? "asc" : "desc";
+  return { key: allowed.has(key) ? key : "mean", dir };
+}
+
+function normalizeImportedExpandedKeys(rawExpanded) {
+  if (!Array.isArray(rawExpanded)) return new Set();
+  return new Set(rawExpanded.map((v) => String(v || "").trim()).filter(Boolean));
+}
+
+function normalizeImportedChartFilters(rawFilters, productsInStation) {
+  const products = productsInStation.map((p) => p.name);
+  const processes = Array.from(new Set(productsInStation.map((p) => String(p.process || "").trim()).filter(Boolean)));
+  const densities = Array.from(new Set(productsInStation.map((p) => String(p.density || "").trim()).filter(Boolean)));
+  const voltages = Array.from(new Set(productsInStation.map((p) => String(p.voltage || "").trim()).filter(Boolean)));
+  const pick = (values, allowed) => {
+    const allowSet = new Set(allowed);
+    if (!Array.isArray(values)) return [];
+    return values.map((v) => String(v || "").trim()).filter((v) => v && allowSet.has(v));
+  };
+  return {
+    product: pick(rawFilters?.product, products),
+    process: pick(rawFilters?.process, processes),
+    density: pick(rawFilters?.density, densities),
+    voltage: pick(rawFilters?.voltage, voltages),
+  };
+}
+
+function normalizeStringSet(rawValues) {
+  if (!Array.isArray(rawValues)) return new Set();
+  return new Set(rawValues.map((v) => String(v || "").trim()).filter(Boolean));
+}
+
+function parseBooleanOrDefault(value, fallback) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+  return Boolean(fallback);
+}
+
 function parseStatsRows(rows) {
   const header = (rows[0] ?? []).map((v) => String(v ?? "").trim());
   const idxMap = new Map(header.map((name, idx) => [name, idx]));
@@ -1326,9 +1503,11 @@ function parseStatsRows(rows) {
       .split("|")
       .map((s) => s.trim())
       .filter(Boolean);
+    const group = String(getCellByHeader(row, idxMap, ["Group"], -1) ?? "").trim();
     stats.push({
       testNos,
       testItem,
+      group,
       count: Number.isFinite(count) ? count : 0,
       mean: Number.isFinite(mean) ? mean : 0,
       median: Number.isFinite(median) ? median : 0,
@@ -1343,6 +1522,22 @@ function parseStatsRows(rows) {
       maxDetailLine,
       unit,
     });
+  }
+
+  function mergeImportedGroupingFromStats(stationName, stats) {
+    const stationKey = String(stationName || "").trim().toUpperCase();
+    if (!stationKey || !Array.isArray(stats) || stats.length === 0) return;
+    const stationMap = APP.groupingMapByStation.get(stationKey) ?? new Map();
+    for (const stat of stats) {
+      const testItem = String(stat?.testItem || "").trim();
+      const group = String(stat?.group || "").trim();
+      if (!testItem || !group) continue;
+      stationMap.set(testItem, group);
+    }
+    if (stationMap.size > 0) {
+      APP.groupingMapByStation.set(stationKey, stationMap);
+      APP.groupingReady = true;
+    }
   }
   return stats;
 }
@@ -1862,7 +2057,7 @@ function buildGroupStats(productName, stationName) {
   if (!product || !station) return [];
   const groupMap = new Map();
   for (const stat of station.stats) {
-    const groupName = resolveGroupName(station.name, stat.testItem);
+    const groupName = String(stat.group || "").trim() || resolveGroupName(station.name, stat.testItem);
     const row = groupMap.get(groupName) ?? {
       group: groupName,
       count: 0,
@@ -1919,7 +2114,7 @@ function buildGroupStats(productName, stationName) {
 function buildGroupedItemRows(stats, productName, stationName, ratioBaseTotal) {
   const groupMap = new Map();
   for (const stat of stats) {
-    const groupName = resolveGroupName(stationName, stat.testItem);
+    const groupName = String(stat.group || "").trim() || resolveGroupName(stationName, stat.testItem);
     const row = groupMap.get(groupName) || {
       group: groupName,
       items: [],
@@ -1977,17 +2172,62 @@ function applyGroupScenarioOverride(productName, stationName, groupName, field, 
   else APP.groupScenarioOverrides.set(key, current);
 }
 
+function getGroupScenarioAggregateFromItems(productName, stationName, groupName) {
+  const product = getProductByName(productName);
+  const station = product?.stations.get(stationName);
+  if (!product || !station) return { count: 0, mean: 0, range: 0, effectiveMean: 0 };
+  const targetGroup = String(groupName || "").trim();
+  if (!targetGroup) return { count: 0, mean: 0, range: 0, effectiveMean: 0 };
+
+  let count = 0;
+  let weightedMeanSum = 0;
+  let effectiveTotal = 0;
+  let maxRange = 0;
+  for (const stat of station.stats) {
+    const itemGroup = String(stat.group || "").trim() || resolveGroupName(station.name, stat.testItem);
+    if (itemGroup !== targetGroup) continue;
+    const itemCount = Number(stat.count);
+    if (!Number.isFinite(itemCount) || itemCount <= 0) continue;
+    const scenarioMean = getScenarioMean(stat, productName, stationName);
+    const scenarioRange = getScenarioRange(stat, productName, stationName);
+    const baseRange = Number(stat.range);
+    const rangeFactor = Number.isFinite(baseRange) && baseRange > 0 ? scenarioRange / baseRange : 1;
+    const effective = scenarioMean * (Number.isFinite(rangeFactor) && rangeFactor > 0 ? rangeFactor : 1);
+    count += itemCount;
+    weightedMeanSum += scenarioMean * itemCount;
+    effectiveTotal += (Number.isFinite(effective) && effective >= 0 ? effective : 0) * itemCount;
+    maxRange = Math.max(maxRange, Number.isFinite(scenarioRange) && scenarioRange >= 0 ? scenarioRange : 0);
+  }
+
+  return {
+    count,
+    mean: count > 0 ? weightedMeanSum / count : 0,
+    range: maxRange,
+    effectiveMean: count > 0 ? effectiveTotal / count : 0,
+  };
+}
+
 function getGroupScenarioMean(stat, productName, stationName) {
   const override = getGroupScenarioOverride(productName, stationName, stat.group);
-  return Number.isFinite(override?.mean) ? override.mean : stat.mean;
+  if (Number.isFinite(override?.mean)) return override.mean;
+  const fromItems = getGroupScenarioAggregateFromItems(productName, stationName, stat.group);
+  return fromItems.count > 0 ? fromItems.mean : stat.mean;
 }
 
 function getGroupScenarioRange(stat, productName, stationName) {
   const override = getGroupScenarioOverride(productName, stationName, stat.group);
-  return Number.isFinite(override?.range) ? override.range : stat.range;
+  if (Number.isFinite(override?.range)) return override.range;
+  const fromItems = getGroupScenarioAggregateFromItems(productName, stationName, stat.group);
+  return fromItems.count > 0 ? fromItems.range : stat.range;
 }
 
 function getGroupScenarioEffectiveMean(stat, productName, stationName) {
+  const override = getGroupScenarioOverride(productName, stationName, stat.group);
+  const hasGroupOverride = Number.isFinite(override?.mean) || Number.isFinite(override?.range);
+  if (!hasGroupOverride) {
+    const fromItems = getGroupScenarioAggregateFromItems(productName, stationName, stat.group);
+    if (fromItems.count > 0) return fromItems.effectiveMean;
+  }
   const scenarioMean = getGroupScenarioMean(stat, productName, stationName);
   const scenarioRange = getGroupScenarioRange(stat, productName, stationName);
   const baseRange = Number(stat.range);
@@ -2067,12 +2307,9 @@ function renderItemTable() {
       const groupExpanded = APP.tableExpanded.has(groupKey);
       const groupRow = `
       <tr class="group-row" data-group-row="true" data-group-name="${escapeHtml(group.group)}">
-        <td class="expand-cell"></td>
-        <td title="${escapeHtml(group.group)}">
-          <button type="button" class="expand-btn group-expand-btn" data-expand-key="${escapeHtml(groupKey)}" aria-expanded="${groupExpanded ? "true" : "false"}">${groupExpanded ? "−" : "+"}</button>
-          <strong>${escapeHtml(group.group)}</strong>
-        </td>
-        <td>-</td>
+        <td class="expand-cell"><button type="button" class="expand-btn" data-expand-key="${escapeHtml(groupKey)}" aria-expanded="${groupExpanded ? "true" : "false"}">${groupExpanded ? "−" : "+"}</button></td>
+        <td class="col-group" title="${escapeHtml(group.group)}"><strong>${escapeHtml(group.group)}</strong></td>
+        <td class="col-testitem">-</td>
         <td>${group.count}</td>
         <td>${fmt(group.baseTotal)}</td>
         <td>-</td>
@@ -2097,8 +2334,8 @@ function renderItemTable() {
         const baseRow = `
         <tr class="group-child-row" data-scenario-row="true" data-scenario-item="${escapeHtml(s.testItem)}">
           <td class="expand-cell">${APP.enableAnomalyDetail && canExpand ? `<button type="button" class="expand-btn" data-expand-key="${escapeHtml(rowKey)}" aria-expanded="${expanded ? "true" : "false"}">${expanded ? "−" : "+"}</button>` : ""}</td>
-          <td></td>
-          <td title="${escapeHtml(s.testItem)}"><span class="group-child-label">${escapeHtml(s.testItem)}</span></td>
+          <td class="col-group"></td>
+          <td class="col-testitem" title="${escapeHtml(s.testItem)}"><span class="group-child-label">${escapeHtml(s.testItem)}</span></td>
           <td>${s.count}</td>
           <td>${fmt(s.mean)}</td>
           <td>${fmt(s.median)}</td>
@@ -2761,6 +2998,7 @@ function exportXlsx() {
     const itemRows = [[
       "Test Nos",
       "Test Item",
+      "Group",
       "Count",
       "Mean(s)",
       "Median(s)",
@@ -2778,6 +3016,7 @@ function exportXlsx() {
       itemRows.push([
         s.testNos.join("|"),
         s.testItem,
+        String(s.group || resolveGroupName(entry.station.name, s.testItem)),
         String(s.count),
         fmt(s.mean),
         fmt(s.median),
@@ -2809,6 +3048,12 @@ function exportXlsx() {
     }
     appendSheet(wb, XLSX.utils.aoa_to_sheet(siteTdRows), `${entry.product}_${entry.station.name}_Site_TouchDown`, usedSheetNames);
   }
+
+  const dashboardRows = [
+    ["Key", "Value"],
+    ["DashboardState", JSON.stringify(buildDashboardStateSnapshot())],
+  ];
+  appendSheet(wb, XLSX.utils.aoa_to_sheet(dashboardRows), "Dashboard_State", usedSheetNames);
 
   const productNames = getProducts().map((p) => p.name).filter(Boolean);
   const safeName = sanitizeFileName(productNames.join("_") || APP.manualProductName || "rawdata");
@@ -2854,7 +3099,7 @@ function setProgress(percent) {
 }
 
 function fmt(n) {
-  return Number.isFinite(n) ? n.toFixed(6) : "-";
+  return Number.isFinite(n) ? n.toFixed(2) : "-";
 }
 
 function formatDuration(totalSeconds) {
