@@ -2459,7 +2459,8 @@ function renderStationReductionChart() {
         scenarioTotal += getScenarioStationTotalTime(product.name, station.name);
       }
       if (baselineTotal <= 0) return null;
-      const reductionPct = ((baselineTotal - scenarioTotal) / baselineTotal) * 100;
+      const reductionPctRaw = ((baselineTotal - scenarioTotal) / baselineTotal) * 100;
+      const reductionPct = Math.max(0, reductionPctRaw);
       return {
         productName: product.name,
         baselineTotal,
@@ -2542,7 +2543,8 @@ function renderGroupStationReductionChart(
         scenarioTotal += hasOverride ? getGroupScenarioStationTotalTime(product.name, station.name) : baseSeconds;
       }
       if (baselineTotal <= 0) return null;
-      const reductionPct = hasOverride ? ((baselineTotal - scenarioTotal) / baselineTotal) * 100 : 0;
+      const reductionPctRaw = hasOverride ? ((baselineTotal - scenarioTotal) / baselineTotal) * 100 : 0;
+      const reductionPct = Math.max(0, reductionPctRaw);
       return {
         productName: product.name,
         baselineTotal,
