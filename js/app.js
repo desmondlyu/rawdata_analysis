@@ -9,7 +9,7 @@ const APP = {
   activeStation: "",
   activeProduct: "",
   chartSortProduct: "",
-  chartFilters: { product: "__all__", process: "", density: "", voltage: "" },
+  chartFilters: { product: [], process: [], density: [], voltage: [] },
   enableAnomalyDetail: false,
   tableSort: { key: "mean", dir: "desc" },
   tableExpanded: new Set(),
@@ -71,10 +71,14 @@ const dom = {
   kpiSection: document.getElementById("kpi-section"),
   chartSection: document.getElementById("chart-section"),
   chartSortProduct: document.getElementById("chart-sort-product"),
-  chartFilterProduct: document.getElementById("chart-filter-product"),
-  chartFilterProcess: document.getElementById("chart-filter-process"),
-  chartFilterDensity: document.getElementById("chart-filter-density"),
-  chartFilterVoltage: document.getElementById("chart-filter-voltage"),
+  chartFilterProductBtn: document.getElementById("chart-filter-product-btn"),
+  chartFilterProductMenu: document.getElementById("chart-filter-product-menu"),
+  chartFilterProcessBtn: document.getElementById("chart-filter-process-btn"),
+  chartFilterProcessMenu: document.getElementById("chart-filter-process-menu"),
+  chartFilterDensityBtn: document.getElementById("chart-filter-density-btn"),
+  chartFilterDensityMenu: document.getElementById("chart-filter-density-menu"),
+  chartFilterVoltageBtn: document.getElementById("chart-filter-voltage-btn"),
+  chartFilterVoltageMenu: document.getElementById("chart-filter-voltage-menu"),
   chartToggleBtn: document.getElementById("chart-toggle-btn"),
   chartContent: document.getElementById("chart-content"),
   tableSection: document.getElementById("table-section"),
@@ -99,10 +103,14 @@ dom.siteProductTabs?.addEventListener("click", onProductTabClick);
 dom.statsThead?.addEventListener("click", onStatsHeadClick);
 dom.statsTbody?.addEventListener("click", onStatsBodyClick);
 dom.chartSortProduct?.addEventListener("change", onChartSortProductChange);
-dom.chartFilterProduct?.addEventListener("change", onChartFilterChange);
-dom.chartFilterProcess?.addEventListener("change", onChartFilterChange);
-dom.chartFilterDensity?.addEventListener("change", onChartFilterChange);
-dom.chartFilterVoltage?.addEventListener("change", onChartFilterChange);
+dom.chartFilterProductBtn?.addEventListener("click", onChartProductFilterToggle);
+dom.chartFilterProductMenu?.addEventListener("change", onChartProductFilterItemChange);
+dom.chartFilterProcessBtn?.addEventListener("click", (event) => onChartMultiFilterToggle(event, "process"));
+dom.chartFilterDensityBtn?.addEventListener("click", (event) => onChartMultiFilterToggle(event, "density"));
+dom.chartFilterVoltageBtn?.addEventListener("click", (event) => onChartMultiFilterToggle(event, "voltage"));
+dom.chartFilterProcessMenu?.addEventListener("change", (event) => onChartMultiFilterItemChange(event, "process"));
+dom.chartFilterDensityMenu?.addEventListener("change", (event) => onChartMultiFilterItemChange(event, "density"));
+dom.chartFilterVoltageMenu?.addEventListener("change", (event) => onChartMultiFilterItemChange(event, "voltage"));
 dom.chartToggleBtn?.addEventListener("click", onChartToggleClick);
 dom.tableToggleBtn?.addEventListener("click", onTableToggleClick);
 dom.entryTabAnalysis?.addEventListener("click", () => switchEntryPage("analysis"));
@@ -114,6 +122,7 @@ dom.scopeSelectAll?.addEventListener("click", () => toggleAllScopes(true));
 dom.scopeSelectNone?.addEventListener("click", () => toggleAllScopes(false));
 dom.scopeToggleBtn?.addEventListener("click", onScopeToggleClick);
 dom.folderMeta?.addEventListener("input", onMetaInputChange);
+document.addEventListener("click", onDocumentClick);
 
 initializeGuidePage();
 applyEntryModeUI();
@@ -451,7 +460,7 @@ function resetResultsUI() {
     }
   }
   APP.chartSortProduct = "";
-  APP.chartFilters = { product: "__all__", process: "", density: "", voltage: "" };
+  APP.chartFilters = { product: [], process: [], density: [], voltage: [] };
   APP.tableExpanded.clear();
   APP.tableCollapsed = true;
   APP.scopeCollapsed = false;
@@ -468,10 +477,14 @@ function resetResultsUI() {
   if (dom.tableProductTabs) dom.tableProductTabs.innerHTML = "";
   if (dom.siteProductTabs) dom.siteProductTabs.innerHTML = "";
   if (dom.chartSortProduct) dom.chartSortProduct.innerHTML = "";
-  if (dom.chartFilterProduct) dom.chartFilterProduct.innerHTML = "";
-  if (dom.chartFilterProcess) dom.chartFilterProcess.innerHTML = "";
-  if (dom.chartFilterDensity) dom.chartFilterDensity.innerHTML = "";
-  if (dom.chartFilterVoltage) dom.chartFilterVoltage.innerHTML = "";
+  if (dom.chartFilterProductBtn) dom.chartFilterProductBtn.textContent = "全部產品";
+  if (dom.chartFilterProductMenu) dom.chartFilterProductMenu.innerHTML = "";
+  if (dom.chartFilterProcessBtn) dom.chartFilterProcessBtn.textContent = "全部 Process";
+  if (dom.chartFilterProcessMenu) dom.chartFilterProcessMenu.innerHTML = "";
+  if (dom.chartFilterDensityBtn) dom.chartFilterDensityBtn.textContent = "全部 Density";
+  if (dom.chartFilterDensityMenu) dom.chartFilterDensityMenu.innerHTML = "";
+  if (dom.chartFilterVoltageBtn) dom.chartFilterVoltageBtn.textContent = "全部 Voltage";
+  if (dom.chartFilterVoltageMenu) dom.chartFilterVoltageMenu.innerHTML = "";
   dom.statsTbody.innerHTML = "";
   dom.progressWrap.classList.add("hidden");
   setProgress(0);
@@ -1371,11 +1384,54 @@ function onChartSortProductChange() {
   renderCharts();
 }
 
-function onChartFilterChange() {
-  APP.chartFilters.product = dom.chartFilterProduct?.value || "__all__";
-  APP.chartFilters.process = dom.chartFilterProcess?.value || "";
-  APP.chartFilters.density = dom.chartFilterDensity?.value || "";
-  APP.chartFilters.voltage = dom.chartFilterVoltage?.value || "";
+function onChartProductFilterToggle(event) {
+  event.stopPropagation();
+  const menu = dom.chartFilterProductMenu;
+  const btn = dom.chartFilterProductBtn;
+  if (!menu || !btn) return;
+  closeAllChartMultiFilterMenus();
+  const willOpen = menu.classList.contains("hidden");
+  menu.classList.toggle("hidden", !willOpen);
+  btn.setAttribute("aria-expanded", willOpen ? "true" : "false");
+}
+
+function onChartProductFilterItemChange(event) {
+  const input = event.target;
+  if (!(input instanceof HTMLInputElement)) return;
+  if (!input.matches("[data-chart-product-filter]")) return;
+  APP.chartFilters.product = getCheckedChartProductFilters();
+  const totalOptions = dom.chartFilterProductMenu?.querySelectorAll("input[data-chart-product-filter]").length || 0;
+  syncChartProductFilterButton(totalOptions);
+  renderChartSortOptions();
+  renderCharts();
+}
+
+function onDocumentClick(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  if (target.closest(".chart-multi-filter")) return;
+  closeChartProductFilterMenu();
+  closeAllChartMultiFilterMenus();
+}
+
+function onChartMultiFilterToggle(event, key) {
+  event.stopPropagation();
+  const targetDom = getChartFilterDomByKey(key);
+  if (!targetDom) return;
+  closeChartProductFilterMenu();
+  closeAllChartMultiFilterMenus();
+  const willOpen = targetDom.menu.classList.contains("hidden");
+  targetDom.menu.classList.toggle("hidden", !willOpen);
+  targetDom.button.setAttribute("aria-expanded", willOpen ? "true" : "false");
+}
+
+function onChartMultiFilterItemChange(event, key) {
+  const input = event.target;
+  if (!(input instanceof HTMLInputElement)) return;
+  if (!input.matches("[data-chart-filter-item]")) return;
+  APP.chartFilters[key] = getCheckedChartMultiFilters(key);
+  const totalOptions = getChartFilterDomByKey(key)?.menu.querySelectorAll("input[data-chart-filter-item]").length || 0;
+  syncChartMultiFilterButton(key, `全部 ${capitalizeFilterKey(key)}`, totalOptions);
   renderChartSortOptions();
   renderCharts();
 }
@@ -1597,47 +1653,168 @@ function normalizeFilterValue(value) {
 
 function getChartFilteredProductsInStation(stationName = APP.activeStation) {
   let products = getProductsInStation(stationName);
-  const productFilter = APP.chartFilters.product || "__all__";
-  const processFilter = normalizeFilterValue(APP.chartFilters.process);
-  const densityFilter = normalizeFilterValue(APP.chartFilters.density);
-  const voltageFilter = normalizeFilterValue(APP.chartFilters.voltage);
-  if (productFilter && productFilter !== "__all__") products = products.filter((p) => p.name === productFilter);
-  if (processFilter) products = products.filter((p) => normalizeFilterValue(p.process) === processFilter);
-  if (densityFilter) products = products.filter((p) => normalizeFilterValue(p.density) === densityFilter);
-  if (voltageFilter) products = products.filter((p) => normalizeFilterValue(p.voltage) === voltageFilter);
+  const productFilters = Array.isArray(APP.chartFilters.product) ? APP.chartFilters.product : [];
+  const processFilters = Array.isArray(APP.chartFilters.process) ? APP.chartFilters.process.map(normalizeFilterValue).filter(Boolean) : [];
+  const densityFilters = Array.isArray(APP.chartFilters.density) ? APP.chartFilters.density.map(normalizeFilterValue).filter(Boolean) : [];
+  const voltageFilters = Array.isArray(APP.chartFilters.voltage) ? APP.chartFilters.voltage.map(normalizeFilterValue).filter(Boolean) : [];
+  if (productFilters.length > 0) {
+    const productSet = new Set(productFilters);
+    products = products.filter((p) => productSet.has(p.name));
+  }
+  if (processFilters.length > 0) {
+    const filterSet = new Set(processFilters);
+    products = products.filter((p) => filterSet.has(normalizeFilterValue(p.process)));
+  }
+  if (densityFilters.length > 0) {
+    const filterSet = new Set(densityFilters);
+    products = products.filter((p) => filterSet.has(normalizeFilterValue(p.density)));
+  }
+  if (voltageFilters.length > 0) {
+    const filterSet = new Set(voltageFilters);
+    products = products.filter((p) => filterSet.has(normalizeFilterValue(p.voltage)));
+  }
   return products;
 }
 
-function syncFilterSelect(select, valuePairs, allLabel = "全部") {
-  if (!select) return "";
-  const current = select.value || "";
-  const options = [`<option value="">${escapeHtml(allLabel)}</option>`, ...valuePairs.map((p) => `<option value="${escapeHtml(p.value)}">${escapeHtml(p.label)}</option>`)];
-  select.innerHTML = options.join("");
-  const allowed = new Set(["", ...valuePairs.map((p) => p.value)]);
-  const next = allowed.has(current) ? current : "";
-  select.value = next;
-  return next;
+function getCheckedChartProductFilters() {
+  if (!dom.chartFilterProductMenu) return [];
+  return Array.from(dom.chartFilterProductMenu.querySelectorAll("input[data-chart-product-filter]:checked"))
+    .map((node) => node.getAttribute("data-chart-product-filter") || "")
+    .filter(Boolean);
+}
+
+function syncChartProductFilterButton(totalCount = null) {
+  if (!dom.chartFilterProductBtn) return;
+  const selected = Array.isArray(APP.chartFilters.product) ? APP.chartFilters.product : [];
+  const total = totalCount ?? getProductsInStation(APP.activeStation).length;
+  if (selected.length === 0 || (total > 0 && selected.length >= total)) {
+    dom.chartFilterProductBtn.textContent = "全部產品";
+    dom.chartFilterProductBtn.title = "全部產品";
+    return;
+  }
+  if (selected.length === 1) {
+    dom.chartFilterProductBtn.textContent = selected[0];
+    dom.chartFilterProductBtn.title = selected[0];
+    return;
+  }
+  dom.chartFilterProductBtn.textContent = `${selected.length} 項產品`;
+  dom.chartFilterProductBtn.title = selected.join(", ");
+}
+
+function closeChartProductFilterMenu() {
+  if (!dom.chartFilterProductMenu || !dom.chartFilterProductBtn) return;
+  dom.chartFilterProductMenu.classList.add("hidden");
+  dom.chartFilterProductBtn.setAttribute("aria-expanded", "false");
+}
+
+function getChartFilterDomByKey(key) {
+  if (key === "process" && dom.chartFilterProcessBtn && dom.chartFilterProcessMenu) {
+    return { button: dom.chartFilterProcessBtn, menu: dom.chartFilterProcessMenu };
+  }
+  if (key === "density" && dom.chartFilterDensityBtn && dom.chartFilterDensityMenu) {
+    return { button: dom.chartFilterDensityBtn, menu: dom.chartFilterDensityMenu };
+  }
+  if (key === "voltage" && dom.chartFilterVoltageBtn && dom.chartFilterVoltageMenu) {
+    return { button: dom.chartFilterVoltageBtn, menu: dom.chartFilterVoltageMenu };
+  }
+  return null;
+}
+
+function closeAllChartMultiFilterMenus() {
+  for (const key of ["process", "density", "voltage"]) {
+    const targetDom = getChartFilterDomByKey(key);
+    if (!targetDom) continue;
+    targetDom.menu.classList.add("hidden");
+    targetDom.button.setAttribute("aria-expanded", "false");
+  }
+}
+
+function capitalizeFilterKey(key) {
+  return key ? key[0].toUpperCase() + key.slice(1) : "";
+}
+
+function getCheckedChartMultiFilters(key) {
+  const targetDom = getChartFilterDomByKey(key);
+  if (!targetDom) return [];
+  return Array.from(targetDom.menu.querySelectorAll("input[data-chart-filter-item]:checked"))
+    .map((node) => node.getAttribute("data-chart-filter-item") || "")
+    .filter(Boolean);
+}
+
+function syncChartMultiFilterButton(key, allLabel, totalCount = null) {
+  const targetDom = getChartFilterDomByKey(key);
+  if (!targetDom) return;
+  const selected = Array.isArray(APP.chartFilters[key]) ? APP.chartFilters[key] : [];
+  const total = totalCount ?? 0;
+  if (selected.length === 0 || (total > 0 && selected.length >= total)) {
+    targetDom.button.textContent = allLabel;
+    targetDom.button.title = allLabel;
+    return;
+  }
+  if (selected.length === 1) {
+    targetDom.button.textContent = selected[0];
+    targetDom.button.title = selected[0];
+    return;
+  }
+  targetDom.button.textContent = `${selected.length} 項`;
+  targetDom.button.title = selected.join(", ");
+}
+
+function renderChartProductFilterOptions(productsInStation) {
+  if (!dom.chartFilterProductMenu) return;
+  const options = productsInStation.map((p) => p.name);
+  const allowed = new Set(options);
+  let selected = (Array.isArray(APP.chartFilters.product) ? APP.chartFilters.product : []).filter((name) => allowed.has(name));
+  if (selected.length === 0 && options.length > 0) selected = [...options];
+  APP.chartFilters.product = selected;
+  dom.chartFilterProductMenu.innerHTML = options
+    .map(
+      (name) => `
+        <label class="chart-multi-item">
+          <input type="checkbox" data-chart-product-filter="${escapeHtml(name)}" ${selected.includes(name) ? "checked" : ""}>
+          <span>${escapeHtml(name)}</span>
+        </label>
+      `,
+    )
+    .join("");
+  syncChartProductFilterButton(options.length);
+}
+
+function renderChartMultiFilterOptions(key, options, allLabel) {
+  const targetDom = getChartFilterDomByKey(key);
+  if (!targetDom) return;
+  const allowed = new Set(options);
+  let selected = (Array.isArray(APP.chartFilters[key]) ? APP.chartFilters[key] : []).filter((name) => allowed.has(name));
+  if (selected.length === 0 && options.length > 0) selected = [...options];
+  APP.chartFilters[key] = selected;
+  targetDom.menu.innerHTML = options
+    .map(
+      (value) => `
+        <label class="chart-multi-item">
+          <input type="checkbox" data-chart-filter-item="${escapeHtml(value)}" ${selected.includes(value) ? "checked" : ""}>
+          <span>${escapeHtml(value)}</span>
+        </label>
+      `,
+    )
+    .join("");
+  syncChartMultiFilterButton(key, allLabel, options.length);
 }
 
 function renderChartFilterOptions() {
   const productsInStation = getProductsInStation(APP.activeStation);
-  const productPairs = productsInStation.map((p) => ({ value: p.name, label: p.name }));
-  APP.chartFilters.product = syncFilterSelect(dom.chartFilterProduct, productPairs, "全部產品");
+  renderChartProductFilterOptions(productsInStation);
 
   const processPairs = Array.from(new Set(productsInStation.map((p) => (p.process || "").trim()).filter(Boolean)))
-    .sort((a, b) => a.localeCompare(b))
-    .map((v) => ({ value: v, label: v }));
-  APP.chartFilters.process = syncFilterSelect(dom.chartFilterProcess, processPairs, "全部 Process");
+    .sort((a, b) => a.localeCompare(b));
+  renderChartMultiFilterOptions("process", processPairs, "全部 Process");
 
   const densityPairs = Array.from(new Set(productsInStation.map((p) => (p.density || "").trim()).filter(Boolean)))
-    .sort((a, b) => a.localeCompare(b))
-    .map((v) => ({ value: v, label: v }));
-  APP.chartFilters.density = syncFilterSelect(dom.chartFilterDensity, densityPairs, "全部 Density");
+    .sort((a, b) => a.localeCompare(b));
+  renderChartMultiFilterOptions("density", densityPairs, "全部 Density");
 
   const voltagePairs = Array.from(new Set(productsInStation.map((p) => (p.voltage || "").trim()).filter(Boolean)))
-    .sort((a, b) => a.localeCompare(b))
-    .map((v) => ({ value: v, label: v }));
-  APP.chartFilters.voltage = syncFilterSelect(dom.chartFilterVoltage, voltagePairs, "全部 Voltage");
+    .sort((a, b) => a.localeCompare(b));
+  renderChartMultiFilterOptions("voltage", voltagePairs, "全部 Voltage");
 }
 
 function renderChartSortOptions() {
