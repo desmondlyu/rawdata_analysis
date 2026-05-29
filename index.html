@@ -121,6 +121,7 @@
       <div class="chart-toolbar mb-4">
         <h2 class="text-xl font-bold">統計圖表</h2>
         <div class="chart-control-group">
+          <button id="chart-toggle-btn" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold" aria-expanded="true">收合全部</button>
           <label class="chart-sort-label">
             依產品排序：
             <select id="chart-sort-product" class="chart-sort-select"></select>
@@ -143,7 +144,7 @@
           </label>
         </div>
       </div>
-      <div class="grid lg:grid-cols-2 gap-6">
+      <div id="chart-content" class="grid lg:grid-cols-2 gap-6">
         <div class="chart-box">
           <canvas id="count-chart" aria-label="Test Item 執行次數圖"></canvas>
         </div>
@@ -213,7 +214,8 @@
     </section>
   </main>
   <footer class="px-6 py-6 text-center text-sm text-slate-400">
-    作者: PP32 YPLu (Desmond)
+    <p>RawData Analysis Tool by PP32 YPLu (Desmond)</p>
+    <p>Contact: yplu@winbond.com ｜ Copyright © 2026 PP32 YPLu (Desmond) ｜ MIT License</p>
   </footer>
 
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>

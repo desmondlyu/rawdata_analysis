@@ -14,6 +14,7 @@ const APP = {
   tableSort: { key: "mean", dir: "desc" },
   tableExpanded: new Set(),
   tableCollapsed: true,
+  chartCollapsed: false,
   selectedScopes: new Set(),
   charts: { count: null, mean: null, range: null, ratio: null },
 };
@@ -69,6 +70,8 @@ const dom = {
   chartFilterProcess: document.getElementById("chart-filter-process"),
   chartFilterDensity: document.getElementById("chart-filter-density"),
   chartFilterVoltage: document.getElementById("chart-filter-voltage"),
+  chartToggleBtn: document.getElementById("chart-toggle-btn"),
+  chartContent: document.getElementById("chart-content"),
   tableSection: document.getElementById("table-section"),
   statsThead: document.getElementById("stats-thead"),
   statsTbody: document.getElementById("stats-tbody"),
@@ -94,6 +97,7 @@ dom.chartFilterProduct?.addEventListener("change", onChartFilterChange);
 dom.chartFilterProcess?.addEventListener("change", onChartFilterChange);
 dom.chartFilterDensity?.addEventListener("change", onChartFilterChange);
 dom.chartFilterVoltage?.addEventListener("change", onChartFilterChange);
+dom.chartToggleBtn?.addEventListener("click", onChartToggleClick);
 dom.tableToggleBtn?.addEventListener("click", onTableToggleClick);
 dom.entryTabAnalysis?.addEventListener("click", () => switchEntryPage("analysis"));
 dom.entryTabXlsx?.addEventListener("click", () => switchEntryPage("xlsx"));
@@ -407,6 +411,7 @@ function resetResultsUI() {
   APP.chartFilters = { product: "__all__", process: "", density: "", voltage: "" };
   APP.tableExpanded.clear();
   APP.tableCollapsed = true;
+  APP.chartCollapsed = false;
 
   dom.stationTabsSection?.classList.add("hidden");
   dom.kpiSection.classList.add("hidden");
@@ -426,6 +431,7 @@ function resetResultsUI() {
   dom.progressWrap.classList.add("hidden");
   setProgress(0);
   syncTableCollapsedUI();
+  syncChartCollapsedUI();
 
   destroyKpiCharts();
   for (const key of Object.keys(APP.charts)) {
@@ -451,6 +457,19 @@ function syncTableCollapsedUI() {
 function onTableToggleClick() {
   APP.tableCollapsed = !APP.tableCollapsed;
   syncTableCollapsedUI();
+}
+
+function syncChartCollapsedUI() {
+  if (!dom.chartContent || !dom.chartToggleBtn) return;
+  dom.chartContent.classList.toggle("hidden", APP.chartCollapsed);
+  dom.chartToggleBtn.textContent = APP.chartCollapsed ? "展開全部" : "收合全部";
+  dom.chartToggleBtn.setAttribute("aria-expanded", APP.chartCollapsed ? "false" : "true");
+}
+
+function onChartToggleClick() {
+  APP.chartCollapsed = !APP.chartCollapsed;
+  syncChartCollapsedUI();
+  if (!APP.chartCollapsed) renderCharts();
 }
 
 function updateAnalyzeState() {
@@ -1299,7 +1318,6 @@ function onChartFilterChange() {
   APP.chartFilters.density = dom.chartFilterDensity?.value || "";
   APP.chartFilters.voltage = dom.chartFilterVoltage?.value || "";
   renderChartSortOptions();
-  renderKpi();
   renderCharts();
 }
 
@@ -1404,7 +1422,7 @@ function renderKpiComparisonCharts(rows) {
 }
 
 function renderKpi() {
-  const productsInStation = getChartFilteredProductsInStation(APP.activeStation);
+  const productsInStation = getProductsInStation(APP.activeStation);
   const rows = [];
   for (const product of productsInStation) {
     const station = product.stations.get(APP.activeStation);
@@ -1632,6 +1650,11 @@ function renderCharts() {
   }
   if (!getChartFilteredProductsInStation(APP.activeStation).length) {
     dom.chartSection.classList.add("hidden");
+    return;
+  }
+  syncChartCollapsedUI();
+  if (APP.chartCollapsed) {
+    dom.chartSection.classList.remove("hidden");
     return;
   }
   APP.charts.count = renderMetricChart("count-chart", "count", "Count", "#3b82f6");
