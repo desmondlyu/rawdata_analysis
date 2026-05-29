@@ -186,8 +186,11 @@
         <div class="chart-box">
           <canvas id="tt-ratio-chart" aria-label="TT Ratio/站點 (%)"></canvas>
         </div>
-        <div class="chart-box lg:col-span-2">
+        <div class="chart-box">
           <canvas id="tt-reduction-chart" aria-label="整體測試時間降低百分比（新vs舊）"></canvas>
+        </div>
+        <div class="chart-box">
+          <canvas id="tt-ratio-by-group-chart" aria-label="TT Ratio/站點 (%) by Group"></canvas>
         </div>
       </div>
       <div id="chart-content-group" class="chart-content-panel grid lg:grid-cols-2 gap-6 hidden">
@@ -231,6 +234,7 @@
             <thead id="stats-thead">
               <tr>
                 <th></th>
+                <th>Group</th>
                 <th><button type="button" class="sort-btn" data-sort-key="testItem">Test Item</button></th>
                 <th><button type="button" class="sort-btn" data-sort-key="count">Count</button></th>
                 <th><button type="button" class="sort-btn" data-sort-key="mean">Mean (s)</button></th>

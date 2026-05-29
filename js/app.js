@@ -25,7 +25,7 @@ const APP = {
   floatingStationTabsCollapsed: false,
   selectedScopes: new Set(),
   charts: {
-    count: null, mean: null, range: null, ratio: null, reduction: null,
+    count: null, mean: null, range: null, ratio: null, reduction: null, ratioByGroup: null,
     groupCount: null, groupMean: null, groupRange: null, groupRatio: null, groupReduction: null,
   },
 };
@@ -2067,8 +2067,12 @@ function renderItemTable() {
       const groupExpanded = APP.tableExpanded.has(groupKey);
       const groupRow = `
       <tr class="group-row" data-group-row="true" data-group-name="${escapeHtml(group.group)}">
-        <td class="expand-cell"><button type="button" class="expand-btn" data-expand-key="${escapeHtml(groupKey)}" aria-expanded="${groupExpanded ? "true" : "false"}">${groupExpanded ? "−" : "+"}</button></td>
-        <td title="${escapeHtml(group.group)}"><strong>Group｜${escapeHtml(group.group)}</strong></td>
+        <td class="expand-cell"></td>
+        <td title="${escapeHtml(group.group)}">
+          <button type="button" class="expand-btn group-expand-btn" data-expand-key="${escapeHtml(groupKey)}" aria-expanded="${groupExpanded ? "true" : "false"}">${groupExpanded ? "−" : "+"}</button>
+          <strong>${escapeHtml(group.group)}</strong>
+        </td>
+        <td>-</td>
         <td>${group.count}</td>
         <td>${fmt(group.baseTotal)}</td>
         <td>-</td>
@@ -2093,7 +2097,8 @@ function renderItemTable() {
         const baseRow = `
         <tr class="group-child-row" data-scenario-row="true" data-scenario-item="${escapeHtml(s.testItem)}">
           <td class="expand-cell">${APP.enableAnomalyDetail && canExpand ? `<button type="button" class="expand-btn" data-expand-key="${escapeHtml(rowKey)}" aria-expanded="${expanded ? "true" : "false"}">${expanded ? "−" : "+"}</button>` : ""}</td>
-          <td title="${escapeHtml(s.testItem)}"><span class="group-child-label">└─ ${escapeHtml(s.testItem)}</span></td>
+          <td></td>
+          <td title="${escapeHtml(s.testItem)}"><span class="group-child-label">${escapeHtml(s.testItem)}</span></td>
           <td>${s.count}</td>
           <td>${fmt(s.mean)}</td>
           <td>${fmt(s.median)}</td>
@@ -2111,7 +2116,7 @@ function renderItemTable() {
         return `${baseRow}
         <tr class="detail-row">
           <td></td>
-          <td colspan="13" class="detail-cell"><code>${escapeHtml(s.maxDetailLine)}</code></td>
+          <td colspan="14" class="detail-cell"><code>${escapeHtml(s.maxDetailLine)}</code></td>
         </tr>`;
       }).join("");
       return `${groupRow}${children}`;
@@ -2687,6 +2692,7 @@ function renderCharts() {
     APP.charts.range = renderMetricChart("range-chart", "range", "Range (s)", "#f59e0b");
     APP.charts.ratio = renderMetricChart("tt-ratio-chart", "ttRatio", "TT Ratio/站點 (%)", "#a855f7");
     APP.charts.reduction = renderStationReductionChart();
+    APP.charts.ratioByGroup = renderGroupMetricChart("tt-ratio-by-group-chart", "ttRatio", "TT Ratio/站點 (%) by Group", "#a855f7");
   }
   dom.chartSection.classList.remove("hidden");
 }
