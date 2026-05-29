@@ -4,13 +4,16 @@ const APP = {
   entryMode: "analysis",
   sourceMode: "none",
   manualProductName: "",
+  manualFallback: { lotNo: "", waferId: "", station: "", pendingFiles: [] },
   products: new Map(),
   activeStation: "",
   activeProduct: "",
   chartSortProduct: "",
+  chartFilters: { product: "__all__", process: "", density: "", voltage: "" },
   enableAnomalyDetail: false,
   tableSort: { key: "mean", dir: "desc" },
   tableExpanded: new Set(),
+  tableCollapsed: true,
   selectedScopes: new Set(),
   charts: { count: null, mean: null, range: null, ratio: null },
 };
@@ -48,6 +51,7 @@ const dom = {
   guidePage: document.getElementById("guide-page"),
   guideContent: document.getElementById("guide-content"),
   message: document.getElementById("message"),
+  manualEntryHint: document.getElementById("manual-entry-hint"),
   analyzeBtn: document.getElementById("analyze-btn"),
   exportBtn: document.getElementById("export-btn"),
   progressWrap: document.getElementById("progress-wrap"),
@@ -55,10 +59,16 @@ const dom = {
   stationTabsSection: document.getElementById("station-tabs-section"),
   stationTabs: document.getElementById("station-tabs"),
   tableProductTabs: document.getElementById("table-product-tabs"),
+  tableToggleBtn: document.getElementById("table-toggle-btn"),
+  tableContent: document.getElementById("table-content"),
   siteProductTabs: document.getElementById("site-product-tabs"),
   kpiSection: document.getElementById("kpi-section"),
   chartSection: document.getElementById("chart-section"),
   chartSortProduct: document.getElementById("chart-sort-product"),
+  chartFilterProduct: document.getElementById("chart-filter-product"),
+  chartFilterProcess: document.getElementById("chart-filter-process"),
+  chartFilterDensity: document.getElementById("chart-filter-density"),
+  chartFilterVoltage: document.getElementById("chart-filter-voltage"),
   tableSection: document.getElementById("table-section"),
   statsThead: document.getElementById("stats-thead"),
   statsTbody: document.getElementById("stats-tbody"),
@@ -70,7 +80,7 @@ dom.pickBtn.addEventListener("click", onPickSourceClick);
 dom.folderInput.addEventListener("change", handleFolderSelection);
 dom.txtInput.addEventListener("change", handleTxtSelection);
 dom.xlsxInput.addEventListener("change", handleXlsxSelection);
-dom.productInput.addEventListener("input", onProductNameChange);
+dom.productInput?.addEventListener("input", onProductNameChange);
 dom.anomalyDetailToggle?.addEventListener("change", onAnomalyToggleChange);
 dom.analyzeBtn.addEventListener("click", startAnalysis);
 dom.exportBtn.addEventListener("click", exportXlsx);
@@ -80,12 +90,18 @@ dom.siteProductTabs?.addEventListener("click", onProductTabClick);
 dom.statsThead?.addEventListener("click", onStatsHeadClick);
 dom.statsTbody?.addEventListener("click", onStatsBodyClick);
 dom.chartSortProduct?.addEventListener("change", onChartSortProductChange);
+dom.chartFilterProduct?.addEventListener("change", onChartFilterChange);
+dom.chartFilterProcess?.addEventListener("change", onChartFilterChange);
+dom.chartFilterDensity?.addEventListener("change", onChartFilterChange);
+dom.chartFilterVoltage?.addEventListener("change", onChartFilterChange);
+dom.tableToggleBtn?.addEventListener("click", onTableToggleClick);
 dom.entryTabAnalysis?.addEventListener("click", () => switchEntryPage("analysis"));
 dom.entryTabXlsx?.addEventListener("click", () => switchEntryPage("xlsx"));
 dom.entryTabGuide?.addEventListener("click", () => switchEntryPage("guide"));
 dom.scopeSelectList?.addEventListener("change", onScopeSelectionChange);
 dom.scopeSelectAll?.addEventListener("click", () => toggleAllScopes(true));
 dom.scopeSelectNone?.addEventListener("click", () => toggleAllScopes(false));
+dom.folderMeta?.addEventListener("input", onMetaInputChange);
 
 initializeGuidePage();
 applyEntryModeUI();
@@ -113,8 +129,27 @@ function showMessage(text, type = "info") {
   else dom.message.className = "mt-4 text-sm msg-info";
 }
 
+function hasManualFallbackOnly() {
+  return APP.manualFallback.pendingFiles.length > 0 && getProducts().length === 0;
+}
+
+function isManualFallbackReady() {
+  const productToken = detectProductToken(APP.manualProductName.trim());
+  return Boolean(
+    productToken &&
+    APP.manualFallback.lotNo.trim() &&
+    APP.manualFallback.waferId.trim() &&
+    APP.manualFallback.station.trim(),
+  );
+}
+
+function syncManualEntryHint() {
+  if (!dom.manualEntryHint) return;
+  dom.manualEntryHint.classList.toggle("hidden", !hasManualFallbackOnly());
+}
+
 function onProductNameChange() {
-  APP.manualProductName = dom.productInput.value.trim();
+  APP.manualProductName = dom.productInput?.value.trim() || "";
   updateAnalyzeState();
   if (hasAnalyzedData()) {
     renderMeta(buildMetaCards());
@@ -162,6 +197,9 @@ function createProduct(name) {
     waferIds: new Set(),
     datetimes: new Set(),
     rootNames: new Set(),
+    process: "",
+    density: "",
+    voltage: "",
   };
 }
 
@@ -366,7 +404,9 @@ function resetResultsUI() {
     }
   }
   APP.chartSortProduct = "";
+  APP.chartFilters = { product: "__all__", process: "", density: "", voltage: "" };
   APP.tableExpanded.clear();
+  APP.tableCollapsed = true;
 
   dom.stationTabsSection?.classList.add("hidden");
   dom.kpiSection.classList.add("hidden");
@@ -378,10 +418,16 @@ function resetResultsUI() {
   if (dom.tableProductTabs) dom.tableProductTabs.innerHTML = "";
   if (dom.siteProductTabs) dom.siteProductTabs.innerHTML = "";
   if (dom.chartSortProduct) dom.chartSortProduct.innerHTML = "";
+  if (dom.chartFilterProduct) dom.chartFilterProduct.innerHTML = "";
+  if (dom.chartFilterProcess) dom.chartFilterProcess.innerHTML = "";
+  if (dom.chartFilterDensity) dom.chartFilterDensity.innerHTML = "";
+  if (dom.chartFilterVoltage) dom.chartFilterVoltage.innerHTML = "";
   dom.statsTbody.innerHTML = "";
   dom.progressWrap.classList.add("hidden");
   setProgress(0);
+  syncTableCollapsedUI();
 
+  destroyKpiCharts();
   for (const key of Object.keys(APP.charts)) {
     if (APP.charts[key]) {
       APP.charts[key].destroy();
@@ -395,15 +441,41 @@ function resetResultsUI() {
   }
 }
 
+function syncTableCollapsedUI() {
+  if (!dom.tableContent || !dom.tableToggleBtn) return;
+  dom.tableContent.classList.toggle("hidden", APP.tableCollapsed);
+  dom.tableToggleBtn.textContent = APP.tableCollapsed ? "展開全部" : "收合全部";
+  dom.tableToggleBtn.setAttribute("aria-expanded", APP.tableCollapsed ? "false" : "true");
+}
+
+function onTableToggleClick() {
+  APP.tableCollapsed = !APP.tableCollapsed;
+  syncTableCollapsedUI();
+}
+
 function updateAnalyzeState() {
   if (APP.sourceMode === "xlsx") dom.analyzeBtn.disabled = APP.files.length === 0;
-  else {
-    const hasRawFiles = APP.sourceMode === "folder" ? getSelectedRawTxtCount() > 0 : getTotalRawTxtCount() > 0;
+  else if (APP.sourceMode === "folder") {
+    const hasSelectedScopeFiles = getSelectedRawTxtCount() > 0;
+    const hasManualProduct = APP.manualProductName.length > 0;
+    const hasAutoProduct = getProducts().length > 0;
+    const canAnalyzeWithScope = hasSelectedScopeFiles && (hasManualProduct || hasAutoProduct);
+    const canAnalyzeWithManualFallback = hasManualFallbackOnly() && isManualFallbackReady();
+    dom.analyzeBtn.disabled = !(canAnalyzeWithScope || canAnalyzeWithManualFallback);
+  } else if (APP.sourceMode === "txt") {
+    const hasTxtFiles = APP.files.some((file) => file.name.toLowerCase().endsWith(".txt"));
+    const hasAutoProduct = getProducts().length > 0;
+    const canAnalyzeWithAuto = hasTxtFiles && hasAutoProduct;
+    const canAnalyzeWithManualFallback = hasManualFallbackOnly() && isManualFallbackReady();
+    dom.analyzeBtn.disabled = !(canAnalyzeWithAuto || canAnalyzeWithManualFallback);
+  } else {
+    const hasRawFiles = getTotalRawTxtCount() > 0;
     const hasManualProduct = APP.manualProductName.length > 0;
     const hasAutoProduct = getProducts().length > 0;
     dom.analyzeBtn.disabled = !(hasRawFiles && (hasManualProduct || hasAutoProduct));
   }
   dom.exportBtn.disabled = !hasAnalyzedData();
+  syncManualEntryHint();
 }
 
 function detectProductToken(value) {
@@ -463,6 +535,10 @@ function handleFolderSelection(event) {
   APP.sourceMode = "folder";
   APP.files = Array.from(event.target.files || []);
   APP.rootName = "";
+  APP.manualFallback.lotNo = "";
+  APP.manualFallback.waferId = "";
+  APP.manualFallback.station = "";
+  APP.manualFallback.pendingFiles = [];
   APP.products.clear();
   APP.activeStation = "";
   APP.activeProduct = "";
@@ -482,9 +558,11 @@ function handleFolderSelection(event) {
   const rootProduct = detectProductToken(APP.rootName);
   if (rootProduct) {
     APP.manualProductName = rootProduct;
-    dom.productInput.value = rootProduct;
-  } else {
+    if (dom.productInput) dom.productInput.value = rootProduct;
+  } else if (dom.productInput) {
     APP.manualProductName = dom.productInput.value.trim();
+  } else {
+    APP.manualProductName = "";
   }
 
   let totalTxt = 0;
@@ -495,7 +573,17 @@ function handleFolderSelection(event) {
     totalTxt += 1;
     const parsed = parseImportPath(rel);
     if (!parsed) continue;
-    if (!parsed.productName) continue;
+    if (!parsed.productName) {
+      APP.manualFallback.pendingFiles.push(file);
+      if (parsed.stationMeta) {
+        APP.manualFallback.lotNo = APP.manualFallback.lotNo || String(parsed.stationMeta.lotNo || "").trim();
+        APP.manualFallback.waferId = APP.manualFallback.waferId || String(parsed.stationMeta.waferId || "").trim();
+        APP.manualFallback.station = APP.manualFallback.station || String(parsed.stationMeta.station || parsed.stationName || "").trim();
+      } else if (!APP.manualFallback.station) {
+        APP.manualFallback.station = String(parsed.stationName || "").trim();
+      }
+      continue;
+    }
 
     const productName = parsed.productName;
     const product = ensureProduct(productName);
@@ -533,6 +621,10 @@ function handleFolderSelection(event) {
 function handleTxtSelection(event) {
   APP.sourceMode = "txt";
   APP.files = Array.from(event.target.files || []);
+  APP.manualFallback.lotNo = "";
+  APP.manualFallback.waferId = "";
+  APP.manualFallback.station = "";
+  APP.manualFallback.pendingFiles = [];
   APP.selectedScopes.clear();
   APP.rootName = "直接 TXT 上傳";
   APP.products.clear();
@@ -540,15 +632,10 @@ function handleTxtSelection(event) {
   APP.activeProduct = "";
   resetResultsUI();
 
-  APP.manualProductName = dom.productInput.value.trim();
+  APP.manualProductName = "";
   const txtFiles = APP.files.filter((f) => f.name.toLowerCase().endsWith(".txt"));
   if (txtFiles.length > 0) {
-    const product = ensureProduct(APP.manualProductName || "TXT");
-    const station = ensureStation(product, "TXT", "TXT", { lotNo: "-", waferId: "-", station: "TXT", datetime: "-" });
-    station.rawTxtFiles = txtFiles;
-    product.rootNames.add("TXT");
-    APP.activeStation = "TXT";
-    APP.activeProduct = product.name;
+    APP.manualFallback.pendingFiles = txtFiles.slice();
   }
 
   dom.folderName.textContent = txtFiles.length ? `直接 TXT 上傳（${txtFiles.length} 檔）` : "尚未選擇";
@@ -556,7 +643,7 @@ function handleTxtSelection(event) {
   renderScopeSelection();
 
   if (!txtFiles.length) showMessage("未選到任何 .TXT 檔案。", "error");
-  else showMessage(`已選擇 ${txtFiles.length} 個 .TXT 檔案。`, "success");
+  else showMessage(`已選擇 ${txtFiles.length} 個 .TXT 檔案。請輸入 PRODUCT、LOTNO、WAFER ID、站點後開始分析。`, "info");
 
   updateAnalyzeState();
 }
@@ -564,6 +651,10 @@ function handleTxtSelection(event) {
 function handleXlsxSelection(event) {
   APP.sourceMode = "xlsx";
   APP.files = Array.from(event.target.files || []).filter((f) => /\.(xlsx|xls)$/i.test(f.name));
+  APP.manualFallback.lotNo = "";
+  APP.manualFallback.waferId = "";
+  APP.manualFallback.station = "";
+  APP.manualFallback.pendingFiles = [];
   APP.selectedScopes.clear();
   APP.rootName = APP.files.length ? `匯入 XLSX（${APP.files.length} 檔）` : "";
   APP.products.clear();
@@ -582,8 +673,29 @@ function handleXlsxSelection(event) {
 
 function buildMetaCards() {
   if (APP.sourceMode === "txt") {
-    const name = APP.manualProductName || getProducts()[0]?.name || "-";
-    return [{ product: name, lotNo: "-", waferId: "-", station: "TXT" }];
+    if (!getProducts().length) {
+      return [{
+        product: APP.manualProductName || "",
+        lotNo: APP.manualFallback.lotNo || "",
+        waferId: APP.manualFallback.waferId || "",
+        station: APP.manualFallback.station || "",
+        process: "",
+        density: "",
+        voltage: "",
+        manualEditable: hasManualFallbackOnly(),
+      }];
+    }
+    const name = getProducts()[0]?.name || "-";
+    const product = getProductByName(name);
+    return [{
+      product: name,
+      lotNo: "-",
+      waferId: "-",
+      station: "TXT",
+      process: product?.process ?? "",
+      density: product?.density ?? "",
+      voltage: product?.voltage ?? "",
+    }];
   }
   const cards = [];
   for (const product of getProducts()) {
@@ -593,27 +705,91 @@ function buildMetaCards() {
       lotNo: formatValueList(Array.from(product.lotNos).sort()),
       waferId: formatValueList(Array.from(product.waferIds).sort()),
       station: formatValueList(stationNames),
+      process: product.process || "",
+      density: product.density || "",
+      voltage: product.voltage || "",
     });
   }
-  return cards.length ? cards : [{ product: APP.manualProductName || "-", lotNo: "-", waferId: "-", station: "-" }];
+  return cards.length ? cards : [{
+    product: APP.manualProductName || "",
+    lotNo: APP.manualFallback.lotNo || "",
+    waferId: APP.manualFallback.waferId || "",
+    station: APP.manualFallback.station || "",
+    process: "",
+    density: "",
+    voltage: "",
+    manualEditable: hasManualFallbackOnly(),
+  }];
 }
 
 function renderMeta(cards) {
-  const entries = [];
-  for (const card of cards) {
-    entries.push(["PRODUCT", card.product], ["LOTNO", card.lotNo], ["WAFER ID", card.waferId], ["站點", card.station]);
-  }
-  dom.folderMeta.innerHTML = entries
-    .map(
-      ([k, v]) => `
-      <div class="meta-chip">
-        <div class="meta-key">${k}</div>
-        <div class="meta-value">${escapeHtml(String(v ?? "-"))}</div>
+  dom.folderMeta.innerHTML = cards
+    .map((card) => {
+      const manualEditable = Boolean(card.manualEditable);
+      const productChip = manualEditable
+        ? `<div class="meta-chip meta-input-chip"><div class="meta-key">PRODUCT</div><input type="text" class="meta-input" data-manual-field="product" value="${escapeHtml(String(card.product || ""))}" placeholder="請輸入產品名稱"></div>`
+        : `<div class="meta-chip"><div class="meta-key">PRODUCT</div><div class="meta-value">${escapeHtml(String(card.product ?? "-"))}</div></div>`;
+      const lotChip = manualEditable
+        ? `<div class="meta-chip meta-input-chip"><div class="meta-key">LOTNO</div><input type="text" class="meta-input" data-manual-field="lotNo" value="${escapeHtml(String(card.lotNo || ""))}" placeholder="請輸入 LOTNO"></div>`
+        : `<div class="meta-chip"><div class="meta-key">LOTNO</div><div class="meta-value">${escapeHtml(String(card.lotNo ?? "-"))}</div></div>`;
+      const waferChip = manualEditable
+        ? `<div class="meta-chip meta-input-chip"><div class="meta-key">WAFER ID</div><input type="text" class="meta-input" data-manual-field="waferId" value="${escapeHtml(String(card.waferId || ""))}" placeholder="請輸入 WAFER ID"></div>`
+        : `<div class="meta-chip"><div class="meta-key">WAFER ID</div><div class="meta-value">${escapeHtml(String(card.waferId ?? "-"))}</div></div>`;
+      const stationChip = manualEditable
+        ? `<div class="meta-chip meta-input-chip"><div class="meta-key">站點</div><input type="text" class="meta-input" data-manual-field="station" value="${escapeHtml(String(card.station || ""))}" placeholder="請輸入站點"></div>`
+        : `<div class="meta-chip"><div class="meta-key">站點</div><div class="meta-value">${escapeHtml(String(card.station ?? "-"))}</div></div>`;
+      return `
+      <div class="meta-row">
+        ${productChip}
+        ${lotChip}
+        ${waferChip}
+        ${stationChip}
+        <div class="meta-chip meta-input-chip">
+          <div class="meta-key">Process</div>
+          <input type="text" class="meta-input" data-meta-product="${escapeHtml(String(card.product ?? ""))}" data-meta-field="process" value="${escapeHtml(String(card.process || ""))}" placeholder="範例:F45">
+        </div>
+        <div class="meta-chip meta-input-chip">
+          <div class="meta-key">Density</div>
+          <input type="text" class="meta-input" data-meta-product="${escapeHtml(String(card.product ?? ""))}" data-meta-field="density" value="${escapeHtml(String(card.density || ""))}" placeholder="範例: 256Mb">
+        </div>
+        <div class="meta-chip meta-input-chip">
+          <div class="meta-key">Voltage</div>
+          <input type="text" class="meta-input" data-meta-product="${escapeHtml(String(card.product ?? ""))}" data-meta-field="voltage" value="${escapeHtml(String(card.voltage || ""))}" placeholder="範例: 3V">
+        </div>
       </div>
-    `,
-    )
+    `;
+    })
     .join("");
   dom.folderMeta.classList.remove("hidden");
+}
+
+function onMetaInputChange(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) return;
+  const manualField = target.getAttribute("data-manual-field");
+  if (manualField) {
+    const value = target.value.trim();
+    if (manualField === "product") APP.manualProductName = value;
+    else if (manualField === "lotNo") APP.manualFallback.lotNo = value;
+    else if (manualField === "waferId") APP.manualFallback.waferId = value;
+    else if (manualField === "station") APP.manualFallback.station = value;
+    updateAnalyzeState();
+    return;
+  }
+  const productName = target.getAttribute("data-meta-product");
+  const field = target.getAttribute("data-meta-field");
+  if (!productName || !field) return;
+  const product = getProductByName(productName);
+  if (!product) return;
+  const value = target.value.trim();
+  if (field === "process") product.process = value;
+  else if (field === "density") product.density = value;
+  else if (field === "voltage") product.voltage = value;
+  else return;
+  renderChartFilterOptions();
+  renderChartSortOptions();
+  renderKpi();
+  renderCharts();
 }
 
 async function startAnalysis() {
@@ -622,8 +798,38 @@ async function startAnalysis() {
     return;
   }
 
-  APP.manualProductName = dom.productInput.value.trim();
-  const selectedEntries = APP.sourceMode === "folder" ? getSelectedStationEntries() : getSelectableStationEntries();
+  if (dom.productInput) APP.manualProductName = dom.productInput.value.trim();
+  let selectedEntries = APP.sourceMode === "folder" ? getSelectedStationEntries() : getSelectableStationEntries();
+  if ((APP.sourceMode === "folder" || APP.sourceMode === "txt") && !selectedEntries.length && hasManualFallbackOnly()) {
+    const productName = APP.manualProductName.trim();
+    const stationName = APP.manualFallback.station.trim();
+    const lotNo = APP.manualFallback.lotNo.trim();
+    const waferId = APP.manualFallback.waferId.trim();
+    if (!detectProductToken(productName)) {
+      showMessage("PRODUCT 格式錯誤：必須以 FAG/EAG/MAG/AAG/KAG/RAG 開頭。", "error");
+      updateAnalyzeState();
+      return;
+    }
+    if (!productName || !stationName || !lotNo || !waferId) {
+      showMessage("請先完整輸入 PRODUCT、LOTNO、WAFER ID、站點。", "error");
+      updateAnalyzeState();
+      return;
+    }
+    APP.products.clear();
+    const product = ensureProduct(productName);
+    product.lotNos.add(lotNo);
+    product.waferIds.add(waferId);
+    product.rootNames.add("手動輸入");
+    const stationMeta = { lotNo, waferId, station: stationName, datetime: "-" };
+    const station = ensureStation(product, stationName, stationName, stationMeta);
+    station.rawTxtFiles = APP.manualFallback.pendingFiles.slice();
+    APP.activeStation = stationName;
+    APP.activeProduct = productName;
+    initializeScopeSelection();
+    renderMeta(buildMetaCards());
+    renderScopeSelection();
+    selectedEntries = getSelectedStationEntries();
+  }
   const totalFiles = selectedEntries.reduce((acc, entry) => acc + entry.station.rawTxtFiles.length, 0);
   if (!totalFiles) {
     showMessage(APP.sourceMode === "folder" ? "請先勾選至少一個要分析的產品/站點。" : "請先選擇資料夾或上傳 TXT。", "error");
@@ -728,6 +934,7 @@ async function startAnalysis() {
   syncActiveProductForStation();
   renderStationTabs(stationsWithStats);
   renderProductTabs();
+  renderChartFilterOptions();
   renderChartSortOptions();
   renderKpi();
   renderTable();
@@ -783,6 +990,7 @@ async function startAnalysisFromXlsx() {
   renderMeta(buildMetaCards());
   renderStationTabs(stationNames);
   renderProductTabs();
+  renderChartFilterOptions();
   renderChartSortOptions();
   renderKpi();
   renderTable();
@@ -1059,6 +1267,7 @@ function onStationTabClick(event) {
   syncActiveProductForStation();
   renderStationTabs(getStationNames().filter((s) => getProductsInStation(s).length > 0));
   renderProductTabs();
+  renderChartFilterOptions();
   renderChartSortOptions();
   renderKpi();
   renderTable();
@@ -1081,6 +1290,16 @@ function onProductTabClick(event) {
 
 function onChartSortProductChange() {
   APP.chartSortProduct = dom.chartSortProduct?.value || APP.chartSortProduct;
+  renderCharts();
+}
+
+function onChartFilterChange() {
+  APP.chartFilters.product = dom.chartFilterProduct?.value || "__all__";
+  APP.chartFilters.process = dom.chartFilterProcess?.value || "";
+  APP.chartFilters.density = dom.chartFilterDensity?.value || "";
+  APP.chartFilters.voltage = dom.chartFilterVoltage?.value || "";
+  renderChartSortOptions();
+  renderKpi();
   renderCharts();
 }
 
@@ -1165,32 +1384,77 @@ function getRawdataSiteCount(station) {
   return filtered.length > 0 ? filtered.length : station.siteTdMap.size;
 }
 
+function destroyKpiCharts() {
+  if (window.KpiCompareReact?.clear && dom.kpiSection) {
+    window.KpiCompareReact.clear(dom.kpiSection);
+  }
+}
+
+function renderKpiComparisonCharts(rows) {
+  dom.kpiSection.classList.remove("kpi-grid");
+  if (window.KpiCompareReact?.render && dom.kpiSection) {
+    window.KpiCompareReact.render(dom.kpiSection, {
+      stationName: APP.activeStation,
+      rows,
+      colors: PRODUCT_COLORS,
+    });
+    return;
+  }
+  dom.kpiSection.innerHTML = '<div class="kpi-chart-meta">站點：' + escapeHtml(APP.activeStation) + '</div>';
+}
+
 function renderKpi() {
-  const cards = [];
-  const productsInStation = getProductsInStation(APP.activeStation);
+  const productsInStation = getChartFilteredProductsInStation(APP.activeStation);
+  const rows = [];
   for (const product of productsInStation) {
     const station = product.stations.get(APP.activeStation);
     if (!station) continue;
-    cards.push(
-      ["產品名稱", product.name],
-      ["TEST SITE 數", String(getRawdataSiteCount(station))],
-      ["Test Item 種類數", String(station.stats.length)],
-      ["測試站點時間", formatDuration(station.stationTotalTime)],
-      ["Touch Down 數", String(station.touchDownCount)],
-      ["站點", station.name],
-    );
+    rows.push({
+      productName: product.name,
+      siteCount: getRawdataSiteCount(station),
+      itemCount: station.stats.length,
+      stationSeconds: station.stationTotalTime,
+      stationMinutes: Number((station.stationTotalTime / 60).toFixed(3)),
+      touchDownCount: station.touchDownCount,
+      touchDownAvgSeconds: station.touchDownCount > 0 ? Number((station.stationTotalTime / station.touchDownCount).toFixed(3)) : 0,
+      stationName: station.name,
+    });
   }
-  dom.kpiSection.innerHTML = cards
-    .map(
-      ([title, value]) => `
+
+  if (!rows.length) {
+    destroyKpiCharts();
+    dom.kpiSection.innerHTML = "";
+    dom.kpiSection.classList.add("hidden");
+    return;
+  }
+
+  if (rows.length > 1) {
+    destroyKpiCharts();
+    renderKpiComparisonCharts(rows);
+    dom.kpiSection.classList.remove("hidden");
+    return;
+  }
+
+  destroyKpiCharts();
+  dom.kpiSection.classList.add("kpi-grid");
+  const row = rows[0];
+  const cards = [
+    ["產品名稱", row.productName],
+    ["TEST SITE 數", String(row.siteCount)],
+    ["Test Item 種類數", String(row.itemCount)],
+    ["測試站點時間", formatDuration(row.stationSeconds)],
+    ["Touch Down 數", String(row.touchDownCount)],
+    ["站點", row.stationName],
+  ];
+  dom.kpiSection.innerHTML = cards.map(
+    ([title, value]) => `
       <div class="kpi-card">
         <div class="kpi-title">${title}</div>
         <div class="kpi-value">${escapeHtml(value)}</div>
       </div>
     `,
-    )
-    .join("");
-  dom.kpiSection.classList.toggle("hidden", cards.length === 0);
+  ).join("");
+  dom.kpiSection.classList.remove("hidden");
 }
 
 function sortStats(stats, sortKey, sortDir) {
@@ -1208,6 +1472,8 @@ function renderTable() {
   const station = getActiveStationData();
   if (!station) {
     dom.tableSection.classList.add("hidden");
+    APP.tableCollapsed = true;
+    syncTableCollapsedUI();
     return;
   }
   const sorted = sortStats(station.stats, APP.tableSort.key, APP.tableSort.dir);
@@ -1239,12 +1505,62 @@ function renderTable() {
     })
     .join("");
   renderSortHeaderState();
+  syncTableCollapsedUI();
   dom.tableSection.classList.remove("hidden");
+}
+
+function normalizeFilterValue(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function getChartFilteredProductsInStation(stationName = APP.activeStation) {
+  let products = getProductsInStation(stationName);
+  const productFilter = APP.chartFilters.product || "__all__";
+  const processFilter = normalizeFilterValue(APP.chartFilters.process);
+  const densityFilter = normalizeFilterValue(APP.chartFilters.density);
+  const voltageFilter = normalizeFilterValue(APP.chartFilters.voltage);
+  if (productFilter && productFilter !== "__all__") products = products.filter((p) => p.name === productFilter);
+  if (processFilter) products = products.filter((p) => normalizeFilterValue(p.process) === processFilter);
+  if (densityFilter) products = products.filter((p) => normalizeFilterValue(p.density) === densityFilter);
+  if (voltageFilter) products = products.filter((p) => normalizeFilterValue(p.voltage) === voltageFilter);
+  return products;
+}
+
+function syncFilterSelect(select, valuePairs, allLabel = "全部") {
+  if (!select) return "";
+  const current = select.value || "";
+  const options = [`<option value="">${escapeHtml(allLabel)}</option>`, ...valuePairs.map((p) => `<option value="${escapeHtml(p.value)}">${escapeHtml(p.label)}</option>`)];
+  select.innerHTML = options.join("");
+  const allowed = new Set(["", ...valuePairs.map((p) => p.value)]);
+  const next = allowed.has(current) ? current : "";
+  select.value = next;
+  return next;
+}
+
+function renderChartFilterOptions() {
+  const productsInStation = getProductsInStation(APP.activeStation);
+  const productPairs = productsInStation.map((p) => ({ value: p.name, label: p.name }));
+  APP.chartFilters.product = syncFilterSelect(dom.chartFilterProduct, productPairs, "全部產品");
+
+  const processPairs = Array.from(new Set(productsInStation.map((p) => (p.process || "").trim()).filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b))
+    .map((v) => ({ value: v, label: v }));
+  APP.chartFilters.process = syncFilterSelect(dom.chartFilterProcess, processPairs, "全部 Process");
+
+  const densityPairs = Array.from(new Set(productsInStation.map((p) => (p.density || "").trim()).filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b))
+    .map((v) => ({ value: v, label: v }));
+  APP.chartFilters.density = syncFilterSelect(dom.chartFilterDensity, densityPairs, "全部 Density");
+
+  const voltagePairs = Array.from(new Set(productsInStation.map((p) => (p.voltage || "").trim()).filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b))
+    .map((v) => ({ value: v, label: v }));
+  APP.chartFilters.voltage = syncFilterSelect(dom.chartFilterVoltage, voltagePairs, "全部 Voltage");
 }
 
 function renderChartSortOptions() {
   if (!dom.chartSortProduct) return;
-  const productsInStation = getProductsInStation(APP.activeStation);
+  const productsInStation = getChartFilteredProductsInStation(APP.activeStation);
   dom.chartSortProduct.innerHTML = productsInStation
     .map((p) => `<option value="${escapeHtml(p.name)}">${escapeHtml(p.name)}</option>`)
     .join("");
@@ -1274,7 +1590,7 @@ function metricValue(stat, metric) {
 function renderMetricChart(canvasId, metricKey, label, colorFallback) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return null;
-  const productsInStation = getProductsInStation(APP.activeStation);
+  const productsInStation = getChartFilteredProductsInStation(APP.activeStation);
   if (!productsInStation.length) return null;
 
   const sortProduct = getProductByName(APP.chartSortProduct) ?? productsInStation[0];
@@ -1314,7 +1630,7 @@ function renderCharts() {
       APP.charts[key] = null;
     }
   }
-  if (!getProductsInStation(APP.activeStation).length) {
+  if (!getChartFilteredProductsInStation(APP.activeStation).length) {
     dom.chartSection.classList.add("hidden");
     return;
   }
@@ -1362,14 +1678,16 @@ function exportXlsx() {
       key: "LOTNO",
       getValue: (entry) => {
         const fromRoot = parseRootMeta(entry.station.rootFolderName || "")?.lotNo;
-        return fromRoot || "-";
+        const fromParsed = String(entry.station.parsedMeta?.lotNo || "").trim();
+        return fromRoot || fromParsed || "-";
       },
     },
     {
       key: "WAFER ID",
       getValue: (entry) => {
         const fromRoot = parseRootMeta(entry.station.rootFolderName || "")?.waferId;
-        return fromRoot || "-";
+        const fromParsed = String(entry.station.parsedMeta?.waferId || "").trim();
+        return fromRoot || fromParsed || "-";
       },
     },
     { key: "Station", getValue: (entry) => entry.station.name },
@@ -1662,7 +1980,9 @@ function applyEntryModeUI() {
           - <code>資料夾匯入</code>：會讀取符合 <code>產品主目錄/RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/home/*/rawdata</code> 的 .TXT（例如：<code>FAG112/RW_CP1_65296Z600_01_S1P1_20260112181636/home/winbond/rawdata</code>）<br>
           - <code>單選 .TXT 檔案</code>：直接解析你選的單一檔案<br>
           ※ 僅分析產品目錄開頭為 <code>FAG/EAG/MAG/AAG/KAG/RAG</code> 的資料夾，其餘會略過<br>
-          ※ 掃描後可於「解析範圍勾選」選擇要分析的產品/站點`;
+          ※ 掃描後可於「解析範圍勾選」選擇要分析的產品/站點<br>
+          ※ 系統會同步檢查 <code>RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS</code> 並嘗試自動帶入 <code>LOTNO / WAFER ID / 站點</code><br>
+          ※ 若未找到符合產品目錄，可在下方手動輸入 <code>PRODUCT / LOTNO / WAFER ID / 站點</code> 後開始分析（PRODUCT 需以 <code>FAG/EAG/MAG/AAG/KAG/RAG</code> 開頭）`;
   }
   if (isXlsx) APP.sourceMode = "xlsx";
   else if (APP.sourceMode === "xlsx") APP.sourceMode = Array.from(dom.sourceModeRadios).find((r) => r.checked)?.value ?? "folder";

@@ -6,6 +6,46 @@
 
 ---
 
+<!-- ================================================================
+  🤖 AI SESSION CONTEXT — 給下一個 AI Session 看的專案記憶
+  最後更新：2026-05-28，Session b0446654
+  ================================================================ -->
+
+## 🤖 AI 快速喚醒區（給 Copilot / AI 看）
+> 下次回到此專案，請先讀本節，再閱讀其他說明文件，即可還原完整開發背景。
+
+### 專案定位
+- NOR Flash CP Test 時間分析工具，支援 TXT/資料夾匯入與 XLSX 回灌比較。
+- 儀表板核心：站點分頁、產品切換、Test Item 統計表、Site/TD Heatmap。
+
+### 重要技術決策
+| 項目 | 決策 |
+|---|---|
+| 入口架構 | `資料分析 / 匯入XLSX分析 / 操作說明` 三書籤，分析與匯入共用分析面板 |
+| 資料模型 | `APP.products -> Product -> Station -> stats/siteTdMap` |
+| 匯出契約 | `Summary + Product_Station_TestItem_Stats + Product_Station_Site_TouchDown` |
+| 欄位語意 | `DUT` 全面改為 `TD` |
+| 新功能 | `Min/Max Source(SITE/TD)` 與 `Max Detail RawLine`，可由 `+` 展開 |
+
+### 固定設定值（非 GUI）
+- `SITES_PER_PAGE = 24`（Heatmap 分頁）
+- 主要解析關鍵字：`<<< Test Time >>>`、`Total Test Time`
+- 異常明細關鍵字：`T, Terase, Tpgm, Twc, Tbusy, Twp`
+
+### 已安裝 Skills 清單
+- `ui-ux-pro-max`
+
+### 常見錯誤與解法
+- 操作說明頁仍出現分析區：避免對 `#analysis-page` 強制 `display:block`。
+- 書籤看起來分離：入口 tabs 與內容需放在同一個 `entry-shell` 卡片。
+- 匯入 XLSX 後欄位為 `-`：確認 Summary 含 `Product/LOTNO/WAFER ID/Station`。
+
+### 尚未完成的功能
+- [ ] 異常明細 `+` 展開功能進一步優化（含多筆同值顯示策略）
+- [ ] 異常明細資訊進一步可視化（例如 keyword/value 小標籤）
+
+---
+
 ## 📁 支援的上傳檔案格式
 
 ### 匯入XLSX分析（快速比較）
@@ -74,10 +114,12 @@
 3. 支援 **多個產品別 + 多個測試站點** 同時分析
 4. 資料夾匯入僅分析主目錄下產品名稱開頭為 `FAG/EAG/MAG/AAG/KAG/RAG` 的資料夾，其餘會自動略過
 5. 資料夾掃描後可用「解析範圍勾選」選擇要分析的產品與站點
+6. 若未找到符合產品目錄（包含「單選 .TXT 檔案」模式），可在下方手動輸入 `PRODUCT / LOTNO / WAFER ID / 站點` 再開始分析；其中 `PRODUCT` 必須以 `FAG/EAG/MAG/AAG/KAG/RAG` 開頭
+7. 系統會同步檢查 `RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS`，即使產品目錄不符合，也會先嘗試自動帶入 `LOTNO / WAFER ID / 站點`
 
-### 步驟零：可選擇啟用異常明細解析
+### 步驟二：是否解析單顆異常時間（解析檔案會較長）
 
-- 勾選 **解析單顆異常時間** 後，Test Item 統計表會提供 `+` 展開按鈕
+- 勾選 **啟用解析單顆異常時間** 後，Test Item 統計表會提供 `+` 展開按鈕
 - 可展開查看對應 Max(s) 的單顆異常時間 RAWDATA 行
 
 ### 多產品別與多站點資料夾擺放關係
@@ -99,31 +141,32 @@
 - 第二層：站點資料夾（依 `RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS` 命名）
 - 第三層固定：`home\*\rawdata\*.txt`（`*` 為任意字串）
 
-### 步驟二：自動掃描 .TXT 檔案
+### 步驟三：自動掃描 .TXT 檔案
 
 - 系統自動掃描各產品、各站點子目錄下所有 `.TXT` 檔案
 - 顯示找到的檔案列表及檔案大小
+- 若站點資料夾符合 `RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS`，會先自動帶入 `LOTNO / WAFER ID / 站點`
 - 掃描完成後，可在「解析範圍勾選」勾選要分析的產品/站點，再按開始分析
 - 若無 .TXT 檔案，顯示錯誤提示
 
-### 步驟三：執行分析
+### 步驟四：執行分析
 
 1. 點擊 **開始分析** 按鈕開始解析
 2. 系統搜尋特徵字串 `*<<< Test Time >>>,*(S)`
 3. 擷取並歸類各 Test Item 及其對應數值（Test No 會保留為參考欄位）
 4. 執行統計計算
 
-### 步驟四：檢視分析結果
+### 步驟五：檢視分析結果
 
 分析完成後顯示：
 - 站點分頁（Tab）切換不同測試站點儀表板
 - 產品分頁（Tab）切換不同產品的統計表與 Site/TD 分析
-- 總摘要 KPI（TEST SITE 數、發現的 Test Item 數、測試站點時間、Touch Down 數等）
+- 站點摘要區（單產品顯示 KPI 卡片；多產品自動切換為比較圖表）
 - Test Item 列表及統計資訊
 - Count / Mean / Range / TT Ratio/站點(%) 四張統計圖（可依指定產品做排序基準）
 - 可選擇展開 `+` 查看單顆異常時間明細（若該 Test Item 有匹配資料）
 
-### 步驟五：匯入XLSX分析（多產品快速比較）
+### 步驟六：匯入XLSX分析（多產品快速比較）
 
 1. 切換到入口書籤 **匯入XLSX分析**
 2. 一次匯入多個由本工具匯出的 XLSX
@@ -133,7 +176,7 @@
 
 ## 📋 儀表板介紹
 
-### 全局 KPI 卡片
+### 站點摘要（KPI / 比較圖）
 
 | KPI | 說明 |
 |-----|------|
@@ -142,6 +185,8 @@
 | **測試站點時間** | 依 TD 分組後，取跨檔案最大 Total Test Time 再加總，畫面顯示為 `HH:MM:SS`（時:分:秒） |
 | **Touch Down 數** | 參與加總的 TD 數量 |
 | **測試站點** | 從資料夾名稱解析的測試站點 |
+
+> 當同一站點下有多個產品時，摘要區會自動改為四張橫向比較圖：`單次 Touch Down 時間(s)`、`Test Item 種類數`、`測試站點時間(min)`、`Touch Down 數`。
 
 ### 測試站點時間計算規則
 

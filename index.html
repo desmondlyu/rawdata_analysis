@@ -32,24 +32,8 @@
 
     <div id="analysis-page" class="entry-page">
     <section class="p-6">
-      <p class="step-label mb-4">步驟零：輸入產品名稱</p>
-      <div class="mb-6 grid md:grid-cols-[1fr_auto] gap-4 items-start">
-        <div>
-          <label for="product-input" class="block text-sm mb-2 hint-text">產品名稱（顯示於 Dashboard 與 XLSX）</label>
-          <input id="product-input" type="text" class="input-field w-full md:w-96" placeholder="例如：EAG119C">
-          <label class="source-mode-option mt-3 inline-flex">
-            <input id="anomaly-detail-toggle" type="checkbox">
-            <span>解析單顆異常時間</span>
-          </label>
-        </div>
-        <div class="rounded-xl p-4 folder-summary md:min-w-[380px]">
-          <p class="text-xs mb-1 folder-summary-label">目前來源</p>
-          <p id="folder-name" class="font-semibold break-all folder-summary-value">尚未選擇</p>
-        </div>
-      </div>
-
       <p class="step-label mb-4">步驟一：選擇資料來源</p>
-      <div class="grid gap-4 items-center">
+      <div class="grid gap-4 items-start md:grid-cols-[1fr_auto]">
         <div>
         <div id="source-mode-group" class="source-mode-group mb-3" role="radiogroup" aria-label="資料來源模式">
           <label class="source-mode-option">
@@ -80,11 +64,23 @@
           - <code>單選 .TXT 檔案</code>：直接解析你選的單一檔案
           <br>※ 僅分析產品目錄開頭為 <code>FAG/EAG/MAG/AAG/KAG/RAG</code> 的資料夾，其餘會略過
           <br>※ 掃描後可於「解析範圍勾選」選擇要分析的產品/站點
+          <br>※ 系統會同步檢查 <code>RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS</code> 並嘗試自動帶入 <code>LOTNO / WAFER ID / 站點</code>
+          <br>※ 若未找到符合產品目錄（含「單選 .TXT 檔案」模式），可在下方手動輸入 <code>PRODUCT / LOTNO / WAFER ID / 站點</code> 後開始分析（PRODUCT 需以 <code>FAG/EAG/MAG/AAG/KAG/RAG</code> 開頭）
         </p>
+      </div>
+      <div class="rounded-xl p-4 folder-summary md:min-w-[380px]">
+        <p class="text-xs mb-1 folder-summary-label">目前來源</p>
+        <p id="folder-name" class="font-semibold break-all folder-summary-value">尚未選擇</p>
       </div>
       </div>
 
-      <div id="folder-meta" class="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3 hidden"></div>
+      <p class="step-label mt-5 mb-3">步驟二：是否解析單顆異常時間（解析檔案會較長）</p>
+      <label class="source-mode-option inline-flex">
+        <input id="anomaly-detail-toggle" type="checkbox">
+        <span>啟用解析單顆異常時間</span>
+      </label>
+
+      <div id="folder-meta" class="mt-4 hidden"></div>
       <section id="scope-select-panel" class="mt-4 card p-4 hidden">
         <div class="scope-select-head">
           <div>
@@ -100,6 +96,7 @@
         <div id="scope-select-list" class="scope-select-list mt-3"></div>
       </section>
       <p id="message" class="mt-4 text-sm msg-info"></p>
+      <p id="manual-entry-hint" class="mt-1 text-sm hint-text hidden">若未找到符合產品目錄，請先在下方手動輸入 PRODUCT、LOTNO、WAFER ID、站點，再開始分析（PRODUCT 必須以 FAG/EAG/MAG/AAG/KAG/RAG 開頭）。</p>
       <div id="progress-wrap" class="mt-3 hidden">
         <div class="progress-track">
           <div id="progress-bar" class="progress-fill"></div>
@@ -117,16 +114,34 @@
 
     <section id="station-tabs-section" class="card p-0 hidden overflow-hidden mx-6 mb-6">
       <div id="station-tabs" class="station-tabs" role="tablist" aria-label="站點切換"></div>
-      <section id="kpi-section" class="kpi-grid hidden"></section>
+      <section id="kpi-section" class="kpi-panel hidden"></section>
     </section>
 
     <section id="chart-section" class="card p-6 hidden mx-6 mb-6">
       <div class="chart-toolbar mb-4">
         <h2 class="text-xl font-bold">統計圖表</h2>
-        <label class="chart-sort-label">
-          依產品排序：
-          <select id="chart-sort-product" class="chart-sort-select"></select>
-        </label>
+        <div class="chart-control-group">
+          <label class="chart-sort-label">
+            依產品排序：
+            <select id="chart-sort-product" class="chart-sort-select"></select>
+          </label>
+          <label class="chart-sort-label">
+            產品篩選：
+            <select id="chart-filter-product" class="chart-sort-select"></select>
+          </label>
+          <label class="chart-sort-label">
+            Process：
+            <select id="chart-filter-process" class="chart-sort-select"></select>
+          </label>
+          <label class="chart-sort-label">
+            Density：
+            <select id="chart-filter-density" class="chart-sort-select"></select>
+          </label>
+          <label class="chart-sort-label">
+            Voltage：
+            <select id="chart-filter-voltage" class="chart-sort-select"></select>
+          </label>
+        </div>
       </div>
       <div class="grid lg:grid-cols-2 gap-6">
         <div class="chart-box">
@@ -145,32 +160,37 @@
     </section>
 
     <section id="table-section" class="card p-0 overflow-hidden hidden mx-6 mb-6">
-      <div class="p-6 border-b border-slate-700">
+      <div class="table-header p-6 border-b border-slate-700">
         <h2 class="text-xl font-bold">Test Item 統計表</h2>
-        <div class="mt-3">
-          <p class="hint-text text-xs mb-2">By Product 切換（影響 Test Item 統計表）</p>
-          <div id="table-product-tabs" class="station-tabs" role="tablist" aria-label="Test Item 產品切換"></div>
-        </div>
+        <button id="table-toggle-btn" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold" aria-expanded="false">展開全部</button>
       </div>
-      <div class="overflow-auto">
-        <table class="min-w-full stat-table">
-          <thead id="stats-thead">
-            <tr>
-              <th></th>
-              <th><button type="button" class="sort-btn" data-sort-key="testItem">Test Item</button></th>
-              <th><button type="button" class="sort-btn" data-sort-key="count">Count</button></th>
-              <th><button type="button" class="sort-btn" data-sort-key="mean">Mean (s)</button></th>
-              <th><button type="button" class="sort-btn" data-sort-key="median">Median (s)</button></th>
-              <th><button type="button" class="sort-btn" data-sort-key="range">Range (s)</button></th>
-              <th><button type="button" class="sort-btn" data-sort-key="ttRatio">TT Ratio/站點 (%)</button></th>
-              <th><button type="button" class="sort-btn" data-sort-key="min">Min (s)</button></th>
-              <th>Min Source (SITE/TD)</th>
-              <th><button type="button" class="sort-btn" data-sort-key="max">Max (s)</button></th>
-              <th>Max Source (SITE/TD)</th>
-            </tr>
-          </thead>
-          <tbody id="stats-tbody"></tbody>
-        </table>
+      <div id="table-content" class="hidden">
+        <div class="px-6 pb-2">
+          <div class="mt-3">
+            <p class="hint-text text-xs mb-2">By Product 切換（影響 Test Item 統計表）</p>
+            <div id="table-product-tabs" class="station-tabs" role="tablist" aria-label="Test Item 產品切換"></div>
+          </div>
+        </div>
+        <div class="overflow-auto">
+          <table class="min-w-full stat-table">
+            <thead id="stats-thead">
+              <tr>
+                <th></th>
+                <th><button type="button" class="sort-btn" data-sort-key="testItem">Test Item</button></th>
+                <th><button type="button" class="sort-btn" data-sort-key="count">Count</button></th>
+                <th><button type="button" class="sort-btn" data-sort-key="mean">Mean (s)</button></th>
+                <th><button type="button" class="sort-btn" data-sort-key="median">Median (s)</button></th>
+                <th><button type="button" class="sort-btn" data-sort-key="range">Range (s)</button></th>
+                <th><button type="button" class="sort-btn" data-sort-key="ttRatio">TT Ratio/站點 (%)</button></th>
+                <th><button type="button" class="sort-btn" data-sort-key="min">Min (s)</button></th>
+                <th>Min Source (SITE/TD)</th>
+                <th><button type="button" class="sort-btn" data-sort-key="max">Max (s)</button></th>
+                <th>Max Source (SITE/TD)</th>
+              </tr>
+            </thead>
+            <tbody id="stats-tbody"></tbody>
+          </table>
+        </div>
       </div>
     </section>
 
@@ -200,6 +220,7 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="js/siteTdHeatmapReact.js"></script>
+  <script src="js/kpiCompareReact.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
