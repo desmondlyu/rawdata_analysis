@@ -1497,6 +1497,10 @@ function onStationTabClick(event) {
   if (!stationName) return;
   APP.activeStation = stationName;
   APP.tableExpanded.clear();
+  APP.chartFilters.product = [];
+  APP.chartFilters.process = [];
+  APP.chartFilters.density = [];
+  APP.chartFilters.voltage = [];
   syncActiveProductForStation();
   renderStationTabs(getStationNames().filter((s) => getProductsInStation(s).length > 0));
   renderProductTabs();
@@ -1862,8 +1866,40 @@ function getScenarioStationTotalTime(productName, stationName) {
   return Math.max(0, station.stationTotalTime + delta);
 }
 
+function getItemRatioBaseTotal(productName, stationName) {
+  const product = getProductByName(productName);
+  const station = product?.stations.get(stationName);
+  if (!station) return 0;
+  return station.stats.reduce((acc, stat) => {
+    const mean = Number(stat.mean);
+    const count = Number(stat.count);
+    if (!Number.isFinite(mean) || !Number.isFinite(count) || count <= 0) return acc;
+    return acc + (mean * count);
+  }, 0);
+}
+
+function getItemBaseTtRatio(stat, productName, stationName, baseTotal = null) {
+  const total = Number.isFinite(baseTotal) ? baseTotal : getItemRatioBaseTotal(productName, stationName);
+  if (!Number.isFinite(total) || total <= 0) return 0;
+  const mean = Number(stat.mean);
+  const count = Number(stat.count);
+  if (!Number.isFinite(mean) || !Number.isFinite(count) || count <= 0) return 0;
+  return (mean * count / total) * 100;
+}
+
+function getItemRatioScenarioTotal(productName, stationName) {
+  const product = getProductByName(productName);
+  const station = product?.stations.get(stationName);
+  if (!station) return 0;
+  return station.stats.reduce((acc, stat) => {
+    const count = Number(stat.count);
+    if (!Number.isFinite(count) || count <= 0) return acc;
+    return acc + (getScenarioEffectiveMean(stat, productName, stationName) * count);
+  }, 0);
+}
+
 function getScenarioTtRatio(stat, productName, stationName, scenarioStationTotal = null) {
-  const stationTotal = Number.isFinite(scenarioStationTotal) ? scenarioStationTotal : getScenarioStationTotalTime(productName, stationName);
+  const stationTotal = Number.isFinite(scenarioStationTotal) ? scenarioStationTotal : getItemRatioScenarioTotal(productName, stationName);
   if (!Number.isFinite(stationTotal) || stationTotal <= 0) return 0;
   return (getScenarioEffectiveMean(stat, productName, stationName) * stat.count / stationTotal) * 100;
 }
@@ -2047,8 +2083,13 @@ function renderItemTable() {
     syncTableCollapsedUI();
     return;
   }
-  const sorted = sortStats(station.stats, APP.tableSort.key, APP.tableSort.dir);
-  const scenarioStationTotal = getScenarioStationTotalTime(product.name, station.name);
+  const baseRatioTotal = getItemRatioBaseTotal(product.name, station.name);
+  const statsWithComputedRatio = station.stats.map((s) => ({
+    ...s,
+    ttRatio: getItemBaseTtRatio(s, product.name, station.name, baseRatioTotal),
+  }));
+  const sorted = sortStats(statsWithComputedRatio, APP.tableSort.key, APP.tableSort.dir);
+  const scenarioStationTotal = getItemRatioScenarioTotal(product.name, station.name);
   dom.statsTbody.innerHTML = sorted
     .map((s) => {
       const rowKey = makeTableExpandKey(station.name, s.testItem);
@@ -2141,7 +2182,7 @@ function syncScenarioCells() {
   const station = getActiveStationData();
   if (!product || !station || !dom.statsTbody) return;
   const statMap = new Map(station.stats.map((s) => [s.testItem, s]));
-  const scenarioStationTotal = getScenarioStationTotalTime(product.name, station.name);
+  const scenarioStationTotal = getItemRatioScenarioTotal(product.name, station.name);
   const rows = dom.statsTbody.querySelectorAll("tr[data-scenario-row='true']");
   for (const row of rows) {
     const item = row.getAttribute("data-scenario-item");
@@ -2733,6 +2774,7 @@ function exportXlsx() {
       "Unit",
     ]];
     for (const s of entry.station.stats) {
+      const baseRatio = getItemBaseTtRatio(s, entry.product, entry.station.name);
       itemRows.push([
         s.testNos.join("|"),
         s.testItem,
@@ -2740,7 +2782,7 @@ function exportXlsx() {
         fmt(s.mean),
         fmt(s.median),
         fmt(s.range),
-        fmt(s.ttRatio),
+        fmt(baseRatio),
         fmt(s.min),
         formatSiteTdSource(s.minSite, s.minTd),
         fmt(s.max),

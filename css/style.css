@@ -947,9 +947,15 @@ body.theme-light .progress-track {
 
 .chart-toolbar {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  flex-direction: column;
   gap: 0.8rem;
+}
+
+.chart-toolbar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
   flex-wrap: wrap;
 }
 
@@ -977,7 +983,7 @@ body.theme-light .progress-track {
 .chart-control-group {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 0.55rem;
   flex-wrap: wrap;
 }

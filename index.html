@@ -136,12 +136,15 @@
 
     <section id="chart-section" class="card p-6 hidden mx-6 mb-6">
       <div class="chart-toolbar mb-4">
-        <div>
+        <div class="chart-toolbar-head">
+          <div>
           <h2 class="text-xl font-bold">統計圖表</h2>
           <div class="station-tabs chart-tabs mt-2" role="tablist" aria-label="統計圖表切換">
             <button id="chart-tab-item" type="button" class="station-tab-btn" data-chart-tab="item" aria-selected="true">測試項圖表</button>
             <button id="chart-tab-group" type="button" class="station-tab-btn" data-chart-tab="group" aria-selected="false">群組化圖表</button>
           </div>
+          </div>
+          <button id="chart-toggle-btn" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold" aria-expanded="true">收合全部</button>
         </div>
         <div class="chart-control-group">
           <label class="chart-sort-label">
@@ -168,7 +171,6 @@
             <button id="chart-filter-voltage-btn" type="button" class="chart-sort-select chart-multi-trigger" aria-expanded="false">全部 Voltage</button>
             <div id="chart-filter-voltage-menu" class="chart-multi-menu hidden"></div>
           </div>
-          <button id="chart-toggle-btn" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold" aria-expanded="true">收合全部</button>
         </div>
       </div>
       <div id="chart-content-item" class="chart-content-panel grid lg:grid-cols-2 gap-6">
