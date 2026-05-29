@@ -2993,19 +2993,6 @@ function applyEntryModeUI() {
       ? "規則：請選擇由本工具匯出的 <code>.xlsx</code>，可一次匯入多個產品檔案，系統會自動合併成多產品比較分析。"
       : `規則：先勾選模式再上傳。<br>
           - <code>資料夾匯入</code>：會先抓第一層子目錄作為產品名稱，再到該產品下搜尋站點 RAW DATA。<br>
-          - 目錄建議格式（與README相同）：<br>
-          <pre><code>資料夾根目錄/
-├─ AAG106/
-│  ├─ RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/
-│  │  └─ home/winbond/rawdata/*.TXT
-│  └─ ...
-├─ AAG119/
-│  ├─ RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/
-│  │  └─ home/winbond/rawdata/*.TXT
-│  └─ ...
-└─ FAG102/
-   └─ RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/
-      └─ home/winbond/rawdata/*.TXT</code></pre>
           - <code>單選 .TXT 檔案</code>：直接解析你選的單一檔案<br>
           ※ 僅分析產品目錄開頭為 <code>FAG/EAG/MAG/AAG/KAG/RAG</code> 的資料夾，其餘會略過<br>
           ※ 掃描後可於「解析範圍勾選」選擇要分析的產品/站點<br>
