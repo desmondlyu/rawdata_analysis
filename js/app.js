@@ -25,6 +25,7 @@ const APP = {
   floatingStationTabsCollapsed: false,
   selectedScopes: new Set(),
   importedDashboardState: null,
+  xlsxSummaryCards: [],
   charts: {
     count: null, mean: null, range: null, ratio: null, reduction: null, ratioByGroup: null,
     groupCount: null, groupMean: null, groupRange: null, groupRatio: null, groupReduction: null,
@@ -534,6 +535,7 @@ function resetResultsUI() {
   APP.scenarioOverrides.clear();
   APP.groupScenarioOverrides.clear();
   APP.importedDashboardState = null;
+  APP.xlsxSummaryCards = [];
   APP.tableExpanded.clear();
   APP.activeChartTab = "item";
   APP.tableCollapsed = true;
@@ -832,7 +834,7 @@ function handleTxtSelection(event) {
   updateAnalyzeState();
 }
 
-function handleXlsxSelection(event) {
+async function handleXlsxSelection(event) {
   APP.sourceMode = "xlsx";
   APP.files = Array.from(event.target.files || []).filter((f) => /\.(xlsx|xls)$/i.test(f.name));
   APP.manualFallback.lotNo = "";
@@ -844,18 +846,27 @@ function handleXlsxSelection(event) {
   APP.products.clear();
   APP.activeStation = "";
   APP.activeProduct = "";
+  APP.xlsxSummaryCards = [];
   resetResultsUI();
 
   dom.folderName.textContent = APP.files.length ? APP.rootName : "尚未選擇";
-  renderMeta([{ product: "-", lotNo: "-", waferId: "-", station: "-" }]);
+  if (APP.files.length > 0 && typeof XLSX !== "undefined") {
+    APP.xlsxSummaryCards = await collectXlsxSummaryCards(APP.files);
+  }
+  renderMeta(buildMetaCards());
   renderScopeSelection();
 
   if (!APP.files.length) showMessage("未選到任何 XLSX 檔案。", "error");
-  else showMessage(`已選擇 ${APP.files.length} 個 XLSX 檔案。`, "success");
+  else if (typeof XLSX === "undefined") showMessage(`已選擇 ${APP.files.length} 個 XLSX 檔案，等待分析時再讀取 Summary。`, "info");
+  else if (APP.xlsxSummaryCards.length > 0) showMessage(`已選擇 ${APP.files.length} 個 XLSX 檔案，已從 Summary 載入 PRODUCT / LOTID / WAFER ID。`, "success");
+  else showMessage(`已選擇 ${APP.files.length} 個 XLSX 檔案，未在 Summary 找到完整欄位。`, "info");
   updateAnalyzeState();
 }
 
 function buildMetaCards() {
+  if (APP.sourceMode === "xlsx" && APP.xlsxSummaryCards.length > 0 && !getProducts().length) {
+    return APP.xlsxSummaryCards;
+  }
   if (APP.sourceMode === "txt") {
     if (!getProducts().length) {
       return [{
@@ -1272,11 +1283,61 @@ function fieldToSummaryKey(field) {
   if (normalized === "product" || normalized === "產品名稱" || normalized === "產品") return "product";
   if (normalized === "root" || normalized === "rootfolder" || normalized === "主目錄") return "root";
   if (normalized === "station" || normalized === "站點") return "station";
-  if (normalized === "lotno" || normalized === "lot" || normalized === "批號") return "lotNo";
+  if (normalized === "lotno" || normalized === "lot" || normalized === "lotid" || normalized === "批號") return "lotNo";
   if (normalized === "waferid" || normalized === "wafer" || normalized === "晶圓id") return "waferId";
+  if (normalized === "process") return "process";
+  if (normalized === "density") return "density";
+  if (normalized === "voltage") return "voltage";
   if (normalized === "touchdowncount") return "touchDownCount";
   if (normalized === "stationtotaltimeseconds") return "stationTotalTimeSeconds";
   return raw;
+}
+
+async function collectXlsxSummaryCards(files) {
+  const byProduct = new Map();
+  for (const file of files) {
+    const buf = await file.arrayBuffer();
+    const workbook = XLSX.read(buf, { type: "array" });
+    const entries = parseSummaryEntries(workbook);
+    for (const entry of entries) {
+      const keyParsed = parseSummaryEntryKey(entry.key);
+      const productName = String(entry.product || keyParsed.product || "").trim() || "UNSPECIFIED";
+      const stationName = String(entry.station || keyParsed.station || "").trim();
+      const lotNo = String(entry.lotNo || entry.lot || "").trim();
+      const waferId = String(entry.waferId || entry.wafer || "").trim();
+      const process = String(entry.process || "").trim();
+      const density = String(entry.density || "").trim();
+      const voltage = String(entry.voltage || "").trim();
+      const bucket = byProduct.get(productName) || {
+        product: productName,
+        lotNos: new Set(),
+        waferIds: new Set(),
+        stations: new Set(),
+        processes: new Set(),
+        densities: new Set(),
+        voltages: new Set(),
+      };
+      if (lotNo) bucket.lotNos.add(lotNo);
+      if (waferId) bucket.waferIds.add(waferId);
+      if (stationName) bucket.stations.add(stationName);
+      if (process) bucket.processes.add(process);
+      if (density) bucket.densities.add(density);
+      if (voltage) bucket.voltages.add(voltage);
+      byProduct.set(productName, bucket);
+    }
+  }
+  const cards = Array.from(byProduct.values())
+    .sort((a, b) => a.product.localeCompare(b.product))
+    .map((item) => ({
+      product: item.product,
+      lotNo: formatValueList(Array.from(item.lotNos).sort()),
+      waferId: formatValueList(Array.from(item.waferIds).sort()),
+      station: formatValueList(Array.from(item.stations).sort()),
+      process: formatValueList(Array.from(item.processes).sort()),
+      density: formatValueList(Array.from(item.densities).sort()),
+      voltage: formatValueList(Array.from(item.voltages).sort()),
+    }));
+  return cards;
 }
 
 function parseSummaryEntryKey(key) {
@@ -1523,23 +1584,23 @@ function parseStatsRows(rows) {
       unit,
     });
   }
-
-  function mergeImportedGroupingFromStats(stationName, stats) {
-    const stationKey = String(stationName || "").trim().toUpperCase();
-    if (!stationKey || !Array.isArray(stats) || stats.length === 0) return;
-    const stationMap = APP.groupingMapByStation.get(stationKey) ?? new Map();
-    for (const stat of stats) {
-      const testItem = String(stat?.testItem || "").trim();
-      const group = String(stat?.group || "").trim();
-      if (!testItem || !group) continue;
-      stationMap.set(testItem, group);
-    }
-    if (stationMap.size > 0) {
-      APP.groupingMapByStation.set(stationKey, stationMap);
-      APP.groupingReady = true;
-    }
-  }
   return stats;
+}
+
+function mergeImportedGroupingFromStats(stationName, stats) {
+  const stationKey = String(stationName || "").trim().toUpperCase();
+  if (!stationKey || !Array.isArray(stats) || stats.length === 0) return;
+  const stationMap = APP.groupingMapByStation.get(stationKey) ?? new Map();
+  for (const stat of stats) {
+    const testItem = String(stat?.testItem || "").trim();
+    const group = String(stat?.group || "").trim();
+    if (!testItem || !group) continue;
+    stationMap.set(testItem, group);
+  }
+  if (stationMap.size > 0) {
+    APP.groupingMapByStation.set(stationKey, stationMap);
+    APP.groupingReady = true;
+  }
 }
 
 function parseSiteTdRows(rows) {

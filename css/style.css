@@ -409,10 +409,16 @@ body.theme-light .source-mode-option {
 
 .scope-select-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 0.6rem;
-  flex-wrap: wrap;
+  padding: 0.55rem 1.5rem 0;
+}
+
+.scope-select-panel-body {
+  border-top: 1px solid var(--border);
+  margin-top: 0.5rem;
+  padding: 0.75rem 0.8rem 0.8rem;
 }
 
 .scope-select-actions {
@@ -481,16 +487,11 @@ body.theme-light .source-mode-option {
 }
 
 #scope-select-panel {
-  padding: 0.8rem !important;
-}
-
-#scope-select-panel h3 {
-  font-size: 0.8rem;
-  line-height: 1.2;
+  padding: 0 !important;
 }
 
 #scope-select-panel .hint-text {
-  font-size: 0.76rem !important;
+  font-size: 0.86rem !important;
 }
 
 .scope-select-actions .secondary-btn {
@@ -505,8 +506,16 @@ body.theme-light .source-mode-option {
 
 .kpi-toolbar {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   padding: 0.55rem 1.5rem 0;
+}
+
+.kpi-toolbar-title {
+  color: #e2e8f0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .kpi-card {
@@ -524,6 +533,10 @@ body.theme-light .scope-product-card,
 body.theme-light .folder-summary,
 body.theme-light .heatmap-wrap {
   background: #ffffff;
+}
+
+body.theme-light .kpi-toolbar-title {
+  color: #1e293b;
 }
 
 .kpi-title {

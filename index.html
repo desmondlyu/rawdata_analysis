@@ -84,22 +84,22 @@
       </label>
 
       <div id="folder-meta" class="mt-4 hidden"></div>
-      <section id="scope-select-panel" class="mt-4 card p-4 hidden">
+      <section id="scope-select-panel" class="mt-4 card p-0 hidden overflow-hidden">
         <div class="scope-select-head">
-          <div>
-            <h3 class="text-base font-bold">解析範圍勾選</h3>
-            <p class="hint-text text-sm">可勾選要分析的產品與站點（不需搬移資料夾）</p>
-          </div>
+          <div class="kpi-toolbar-title">解析範圍勾選</div>
+          <button id="scope-toggle-btn" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold" aria-expanded="true">收合全部</button>
         </div>
-        <div class="scope-select-toolbar mt-2">
-          <p id="scope-select-summary" class="hint-text text-sm"></p>
-          <div class="scope-select-actions">
+        <div class="scope-select-panel-body">
+          <p class="hint-text text-sm">可勾選要分析的產品與站點（不需搬移資料夾）</p>
+          <div class="scope-select-toolbar mt-2">
+            <p id="scope-select-summary" class="hint-text text-sm"></p>
+            <div class="scope-select-actions">
             <button id="scope-select-all" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold">全選</button>
             <button id="scope-select-none" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold">全不選</button>
-            <button id="scope-toggle-btn" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold" aria-expanded="true">收合全部</button>
+            </div>
           </div>
+          <div id="scope-select-list" class="scope-select-list mt-3"></div>
         </div>
-        <div id="scope-select-list" class="scope-select-list mt-3"></div>
       </section>
       <p id="message" class="mt-4 text-sm msg-info"></p>
       <p id="manual-entry-hint" class="mt-1 text-sm hint-text hidden">若未找到符合產品目錄，請先在下方手動輸入 PRODUCT、LOTNO、WAFER ID、站點，再開始分析（PRODUCT 必須以 FAG/EAG/MAG/AAG/KAG/RAG 開頭）。</p>
@@ -121,6 +121,7 @@
     <section id="station-tabs-section" class="card p-0 hidden overflow-hidden mx-6 mb-6">
       <div id="station-tabs" class="station-tabs" role="tablist" aria-label="站點切換"></div>
       <div class="kpi-toolbar">
+        <div class="kpi-toolbar-title">測試資訊</div>
         <button id="kpi-toggle-btn" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold" aria-expanded="true">收合全部</button>
       </div>
       <section id="kpi-section" class="kpi-panel hidden"></section>
