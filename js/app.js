@@ -1622,7 +1622,19 @@ function onGroupScenarioInputChange(event) {
   const next = Number.parseFloat(input.value);
   applyGroupScenarioOverride(productName, stationName, groupName, field, next, stat[field]);
   syncGroupScenarioCells();
-  renderCharts();
+  if (APP.activeChartTab === "item") {
+    if (APP.charts.groupReductionFromReport) {
+      APP.charts.groupReductionFromReport.destroy();
+      APP.charts.groupReductionFromReport = null;
+    }
+    APP.charts.groupReductionFromReport = renderGroupStationReductionChart(
+      "group-sim-tt-reduction-chart",
+      "Scenario vs Baseline（來源：群組化報表模擬；By 產品；全部站點合計）",
+      { requireOverrides: true },
+    );
+  } else {
+    renderCharts();
+  }
 }
 
 function onScenarioResetClick() {
@@ -1953,7 +1965,7 @@ function getGroupScenarioOverride(productName, stationName, groupName) {
 function applyGroupScenarioOverride(productName, stationName, groupName, field, nextValue, baseValue) {
   const key = makeGroupScenarioOverrideKey(productName, stationName, groupName);
   const current = APP.groupScenarioOverrides.get(key) || {};
-  if (Number.isFinite(nextValue) && nextValue >= 0 && nextValue !== baseValue) current[field] = nextValue;
+  if (Number.isFinite(nextValue) && nextValue >= 0 && Math.abs(nextValue - baseValue) > 1e-9) current[field] = nextValue;
   else delete current[field];
   if (!Number.isFinite(current.mean) && !Number.isFinite(current.range)) APP.groupScenarioOverrides.delete(key);
   else APP.groupScenarioOverrides.set(key, current);
@@ -2559,17 +2571,18 @@ function renderGroupStationReductionChart(
     })
     .filter(Boolean)
     .sort((a, b) => a.productName.localeCompare(b.productName));
+  const displayRows = requireOverrides ? rows.filter((row) => row.hasOverride) : rows;
 
-  if (!rows.length) return null;
+  if (!displayRows.length) return null;
 
   return new Chart(canvas, {
     type: "bar",
     data: {
-      labels: rows.map((row) => row.productName),
+      labels: displayRows.map((row) => row.productName),
       datasets: [{
         label: "所有站點總時間縮減比例 (%)",
-        data: rows.map((row) => row.reductionPct),
-        backgroundColor: rows.map((_, idx) => PRODUCT_COLORS[idx % PRODUCT_COLORS.length] || "#f97316"),
+        data: displayRows.map((row) => row.reductionPct),
+        backgroundColor: displayRows.map((_, idx) => PRODUCT_COLORS[idx % PRODUCT_COLORS.length] || "#f97316"),
       }],
     },
     options: {
@@ -2581,7 +2594,7 @@ function renderGroupStationReductionChart(
           callbacks: {
             label: (context) => {
               const productName = String(context.label || "");
-              const row = rows.find((item) => item.productName === productName);
+              const row = displayRows.find((item) => item.productName === productName);
               if (!row) return "";
               if (row.scenarioTotal > row.baselineTotal) {
                 const increasedPct = ((row.scenarioTotal - row.baselineTotal) / row.baselineTotal) * 100;
@@ -2980,13 +2993,13 @@ function applyEntryModeUI() {
       ? "規則：請選擇由本工具匯出的 <code>.xlsx</code>，可一次匯入多個產品檔案，系統會自動合併成多產品比較分析。"
       : `規則：先勾選模式再上傳。<br>
           - <code>資料夾匯入</code>：會先抓第一層子目錄作為產品名稱，再到該產品下搜尋站點 RAW DATA。<br>
-          - 目錄建議格式（與 README 相同）：<br>
+          - 目錄建議格式（與README相同）：<br>
           <pre><code>資料夾根目錄/
 ├─ AAG106/
 │  ├─ RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/
 │  │  └─ home/winbond/rawdata/*.TXT
 │  └─ ...
-├─ EAG119/
+├─ AAG119/
 │  ├─ RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/
 │  │  └─ home/winbond/rawdata/*.TXT
 │  └─ ...
