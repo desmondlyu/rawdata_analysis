@@ -23,10 +23,13 @@
   <main class="max-w-[96vw] mx-auto px-4 py-8 space-y-0">
     <section id="entry-shell" class="card p-0 overflow-hidden">
       <section class="entry-tabs-wrap">
-        <div class="entry-tabs" role="tablist" aria-label="入口功能切換">
-          <button id="entry-tab-analysis" type="button" class="entry-tab-btn is-active" data-entry-tab="analysis" aria-selected="true">資料分析</button>
-          <button id="entry-tab-xlsx" type="button" class="entry-tab-btn" data-entry-tab="xlsx" aria-selected="false">匯入XLSX分析</button>
-          <button id="entry-tab-guide" type="button" class="entry-tab-btn" data-entry-tab="guide" aria-selected="false">操作說明</button>
+        <div class="entry-tabs-head">
+          <div class="entry-tabs" role="tablist" aria-label="入口功能切換">
+            <button id="entry-tab-analysis" type="button" class="entry-tab-btn is-active" data-entry-tab="analysis" aria-selected="true">資料分析</button>
+            <button id="entry-tab-xlsx" type="button" class="entry-tab-btn" data-entry-tab="xlsx" aria-selected="false">匯入XLSX分析</button>
+            <button id="entry-tab-guide" type="button" class="entry-tab-btn" data-entry-tab="guide" aria-selected="false">操作說明</button>
+          </div>
+          <button id="theme-toggle-btn" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold mr-3 mb-2" aria-pressed="false">亮色系</button>
         </div>
       </section>
 
@@ -114,6 +117,9 @@
 
     <section id="station-tabs-section" class="card p-0 hidden overflow-hidden mx-6 mb-6">
       <div id="station-tabs" class="station-tabs" role="tablist" aria-label="站點切換"></div>
+      <div class="kpi-toolbar">
+        <button id="kpi-toggle-btn" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold" aria-expanded="true">收合全部</button>
+      </div>
       <section id="kpi-section" class="kpi-panel hidden"></section>
     </section>
 
@@ -121,7 +127,6 @@
       <div class="chart-toolbar mb-4">
         <h2 class="text-xl font-bold">統計圖表</h2>
         <div class="chart-control-group">
-          <button id="chart-toggle-btn" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold" aria-expanded="true">收合全部</button>
           <label class="chart-sort-label">
             依產品排序：
             <select id="chart-sort-product" class="chart-sort-select"></select>
@@ -142,6 +147,7 @@
             Voltage：
             <select id="chart-filter-voltage" class="chart-sort-select"></select>
           </label>
+          <button id="chart-toggle-btn" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold" aria-expanded="true">收合全部</button>
         </div>
       </div>
       <div id="chart-content" class="grid lg:grid-cols-2 gap-6">

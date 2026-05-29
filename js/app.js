@@ -14,6 +14,7 @@ const APP = {
   tableSort: { key: "mean", dir: "desc" },
   tableExpanded: new Set(),
   tableCollapsed: true,
+  kpiCollapsed: false,
   chartCollapsed: false,
   selectedScopes: new Set(),
   charts: { count: null, mean: null, range: null, ratio: null },
@@ -48,6 +49,7 @@ const dom = {
   entryTabAnalysis: document.getElementById("entry-tab-analysis"),
   entryTabXlsx: document.getElementById("entry-tab-xlsx"),
   entryTabGuide: document.getElementById("entry-tab-guide"),
+  themeToggleBtn: document.getElementById("theme-toggle-btn"),
   analysisPage: document.getElementById("analysis-page"),
   guidePage: document.getElementById("guide-page"),
   guideContent: document.getElementById("guide-content"),
@@ -59,6 +61,7 @@ const dom = {
   progressBar: document.getElementById("progress-bar"),
   stationTabsSection: document.getElementById("station-tabs-section"),
   stationTabs: document.getElementById("station-tabs"),
+  kpiToggleBtn: document.getElementById("kpi-toggle-btn"),
   tableProductTabs: document.getElementById("table-product-tabs"),
   tableToggleBtn: document.getElementById("table-toggle-btn"),
   tableContent: document.getElementById("table-content"),
@@ -88,6 +91,7 @@ dom.anomalyDetailToggle?.addEventListener("change", onAnomalyToggleChange);
 dom.analyzeBtn.addEventListener("click", startAnalysis);
 dom.exportBtn.addEventListener("click", exportXlsx);
 dom.stationTabs?.addEventListener("click", onStationTabClick);
+dom.kpiToggleBtn?.addEventListener("click", onKpiToggleClick);
 dom.tableProductTabs?.addEventListener("click", onProductTabClick);
 dom.siteProductTabs?.addEventListener("click", onProductTabClick);
 dom.statsThead?.addEventListener("click", onStatsHeadClick);
@@ -102,6 +106,7 @@ dom.tableToggleBtn?.addEventListener("click", onTableToggleClick);
 dom.entryTabAnalysis?.addEventListener("click", () => switchEntryPage("analysis"));
 dom.entryTabXlsx?.addEventListener("click", () => switchEntryPage("xlsx"));
 dom.entryTabGuide?.addEventListener("click", () => switchEntryPage("guide"));
+dom.themeToggleBtn?.addEventListener("click", onThemeToggleClick);
 dom.scopeSelectList?.addEventListener("change", onScopeSelectionChange);
 dom.scopeSelectAll?.addEventListener("click", () => toggleAllScopes(true));
 dom.scopeSelectNone?.addEventListener("click", () => toggleAllScopes(false));
@@ -109,6 +114,28 @@ dom.folderMeta?.addEventListener("input", onMetaInputChange);
 
 initializeGuidePage();
 applyEntryModeUI();
+initializeTheme();
+
+function applyTheme(theme) {
+  const isLight = theme === "light";
+  document.body.classList.toggle("theme-light", isLight);
+  if (dom.themeToggleBtn) {
+    dom.themeToggleBtn.textContent = isLight ? "深色系" : "亮色系";
+    dom.themeToggleBtn.setAttribute("aria-pressed", isLight ? "true" : "false");
+  }
+}
+
+function initializeTheme() {
+  const saved = localStorage.getItem("tto-theme");
+  applyTheme(saved === "light" ? "light" : "dark");
+}
+
+function onThemeToggleClick() {
+  const toLight = !document.body.classList.contains("theme-light");
+  const theme = toLight ? "light" : "dark";
+  applyTheme(theme);
+  localStorage.setItem("tto-theme", theme);
+}
 
 function onPickSourceClick() {
   if (APP.entryMode === "xlsx") {
@@ -411,6 +438,7 @@ function resetResultsUI() {
   APP.chartFilters = { product: "__all__", process: "", density: "", voltage: "" };
   APP.tableExpanded.clear();
   APP.tableCollapsed = true;
+  APP.kpiCollapsed = false;
   APP.chartCollapsed = false;
 
   dom.stationTabsSection?.classList.add("hidden");
@@ -431,6 +459,7 @@ function resetResultsUI() {
   dom.progressWrap.classList.add("hidden");
   setProgress(0);
   syncTableCollapsedUI();
+  syncKpiCollapsedUI();
   syncChartCollapsedUI();
 
   destroyKpiCharts();
@@ -457,6 +486,19 @@ function syncTableCollapsedUI() {
 function onTableToggleClick() {
   APP.tableCollapsed = !APP.tableCollapsed;
   syncTableCollapsedUI();
+}
+
+function syncKpiCollapsedUI() {
+  if (!dom.kpiToggleBtn || !dom.kpiSection) return;
+  dom.kpiToggleBtn.textContent = APP.kpiCollapsed ? "展開全部" : "收合全部";
+  dom.kpiToggleBtn.setAttribute("aria-expanded", APP.kpiCollapsed ? "false" : "true");
+  if (APP.kpiCollapsed) dom.kpiSection.classList.add("hidden");
+}
+
+function onKpiToggleClick() {
+  APP.kpiCollapsed = !APP.kpiCollapsed;
+  syncKpiCollapsedUI();
+  if (!APP.kpiCollapsed) renderKpi();
 }
 
 function syncChartCollapsedUI() {
@@ -1442,6 +1484,11 @@ function renderKpi() {
   if (!rows.length) {
     destroyKpiCharts();
     dom.kpiSection.innerHTML = "";
+    dom.kpiSection.classList.add("hidden");
+    return;
+  }
+
+  if (APP.kpiCollapsed) {
     dom.kpiSection.classList.add("hidden");
     return;
   }
