@@ -34,7 +34,7 @@ body.theme-light .gradient-header {
 .entry-tabs-wrap {
   background: #111b2f;
   border-bottom: 1px solid var(--border);
-  overflow-x: auto;
+  overflow: hidden;
 }
 
 .entry-tabs-head {
@@ -50,6 +50,19 @@ body.theme-light .gradient-header {
   flex: 1;
   overflow-x: auto;
   padding: 0.8rem 0.85rem 0;
+}
+
+.entry-tabs,
+.station-tabs {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.entry-tabs::-webkit-scrollbar,
+.station-tabs::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .entry-tab-btn {
