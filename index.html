@@ -136,7 +136,13 @@
 
     <section id="chart-section" class="card p-6 hidden mx-6 mb-6">
       <div class="chart-toolbar mb-4">
-        <h2 class="text-xl font-bold">統計圖表</h2>
+        <div>
+          <h2 class="text-xl font-bold">統計圖表</h2>
+          <div class="station-tabs chart-tabs mt-2" role="tablist" aria-label="統計圖表切換">
+            <button id="chart-tab-item" type="button" class="station-tab-btn" data-chart-tab="item" aria-selected="true">測試項圖表</button>
+            <button id="chart-tab-group" type="button" class="station-tab-btn" data-chart-tab="group" aria-selected="false">群組化圖表</button>
+          </div>
+        </div>
         <div class="chart-control-group">
           <label class="chart-sort-label">
             依產品排序：
@@ -165,7 +171,7 @@
           <button id="chart-toggle-btn" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold" aria-expanded="true">收合全部</button>
         </div>
       </div>
-      <div id="chart-content" class="grid lg:grid-cols-2 gap-6">
+      <div id="chart-content-item" class="chart-content-panel grid lg:grid-cols-2 gap-6">
         <div class="chart-box">
           <canvas id="count-chart" aria-label="Test Item 執行次數圖"></canvas>
         </div>
@@ -178,21 +184,47 @@
         <div class="chart-box">
           <canvas id="tt-ratio-chart" aria-label="TT Ratio/站點 (%)"></canvas>
         </div>
-        <div class="chart-box lg:col-span-2">
+        <div class="chart-box">
           <canvas id="tt-reduction-chart" aria-label="整體測試時間降低百分比（新vs舊）"></canvas>
+        </div>
+        <div class="chart-box">
+          <canvas id="group-sim-tt-reduction-chart" aria-label="群組化報表模擬整體測試時間降低百分比（新vs舊）"></canvas>
+        </div>
+      </div>
+      <div id="chart-content-group" class="chart-content-panel grid lg:grid-cols-2 gap-6 hidden">
+        <div class="chart-box">
+          <canvas id="group-count-chart" aria-label="Group 執行次數圖"></canvas>
+        </div>
+        <div class="chart-box">
+          <canvas id="group-mean-chart" aria-label="Group 平均秒數圖"></canvas>
+        </div>
+        <div class="chart-box">
+          <canvas id="group-range-chart" aria-label="Group 級距圖"></canvas>
+        </div>
+        <div class="chart-box">
+          <canvas id="group-tt-ratio-chart" aria-label="Group TT Ratio/站點 (%)"></canvas>
+        </div>
+        <div class="chart-box lg:col-span-2">
+          <canvas id="group-tt-reduction-chart" aria-label="Group 整體測試時間降低百分比（新vs舊）"></canvas>
         </div>
       </div>
     </section>
 
     <section id="table-section" class="card p-0 overflow-hidden hidden mx-6 mb-6">
       <div class="table-header p-6 border-b border-slate-700">
-        <h2 class="text-xl font-bold">Test Item 統計表</h2>
+        <div>
+          <h2 class="text-xl font-bold">統計報表</h2>
+          <div class="station-tabs report-tabs mt-2" role="tablist" aria-label="統計報表切換">
+            <button id="report-tab-item" type="button" class="station-tab-btn" data-report-tab="item" aria-selected="true">測試項報表</button>
+            <button id="report-tab-group" type="button" class="station-tab-btn" data-report-tab="group" aria-selected="false">群組化報表</button>
+          </div>
+        </div>
         <div class="table-actions">
           <button id="scenario-reset-btn" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold">重置模擬</button>
           <button id="table-toggle-btn" type="button" class="secondary-btn px-3 py-2 rounded-lg text-sm font-semibold" aria-expanded="false">展開全部</button>
         </div>
       </div>
-      <div id="table-content" class="hidden">
+      <div id="table-content-item" class="table-content-panel hidden">
         <div class="px-6 pb-2">
           <div class="mt-3">
             <p class="hint-text text-xs mb-2">By Product 切換（影響 Test Item 統計表）</p>
@@ -220,6 +252,37 @@
               </tr>
             </thead>
             <tbody id="stats-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div id="table-content-group" class="table-content-panel hidden">
+        <div class="px-6 pb-2">
+          <div class="mt-3">
+            <p class="hint-text text-xs mb-2">By Product 切換（影響群組化報表）</p>
+            <div id="group-table-product-tabs" class="station-tabs" role="tablist" aria-label="群組報表產品切換"></div>
+          </div>
+        </div>
+        <div class="table-scroll-wrap">
+          <table class="min-w-full stat-table">
+            <thead id="group-stats-thead">
+              <tr>
+                <th></th>
+                <th><button type="button" class="sort-btn" data-group-sort-key="group">Group</button></th>
+                <th><button type="button" class="sort-btn" data-group-sort-key="count">Count</button></th>
+                <th><button type="button" class="sort-btn" data-group-sort-key="mean">Mean (s)</button></th>
+                <th><button type="button" class="sort-btn" data-group-sort-key="median">Median (s)</button></th>
+                <th><button type="button" class="sort-btn" data-group-sort-key="range">Range (s)</button></th>
+                <th><button type="button" class="sort-btn" data-group-sort-key="ttRatio">TT Ratio/站點 (%)</button></th>
+                <th>模擬 Mean (s)</th>
+                <th>模擬 Range (s)</th>
+                <th>模擬 TT Ratio/站點 (%)</th>
+                <th><button type="button" class="sort-btn" data-group-sort-key="min">Min (s)</button></th>
+                <th>Min Source (SITE/TD)</th>
+                <th><button type="button" class="sort-btn" data-group-sort-key="max">Max (s)</button></th>
+                <th>Max Source (SITE/TD)</th>
+              </tr>
+            </thead>
+            <tbody id="group-stats-tbody"></tbody>
           </table>
         </div>
       </div>
@@ -253,6 +316,7 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="js/siteTdHeatmapReact.js"></script>
   <script src="js/kpiCompareReact.js"></script>
+  <script src="js/groupingRules.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -8,9 +8,15 @@ const APP = {
   products: new Map(),
   activeStation: "",
   activeProduct: "",
+  activeChartTab: "item",
+  activeReportTab: "item",
   chartSortProduct: "",
   chartFilters: { product: [], process: [], density: [], voltage: [] },
   scenarioOverrides: new Map(),
+  groupScenarioOverrides: new Map(),
+  groupTableSort: { key: "mean", dir: "desc" },
+  groupingMapByStation: new Map(),
+  groupingReady: false,
   enableAnomalyDetail: false,
   tableSort: { key: "mean", dir: "desc" },
   tableExpanded: new Set(),
@@ -20,7 +26,11 @@ const APP = {
   chartCollapsed: false,
   floatingStationTabsCollapsed: false,
   selectedScopes: new Set(),
-  charts: { count: null, mean: null, range: null, ratio: null, reduction: null },
+  charts: {
+    count: null, mean: null, range: null, ratio: null, reduction: null,
+    groupReductionFromReport: null,
+    groupCount: null, groupMean: null, groupRange: null, groupRatio: null, groupReduction: null,
+  },
 };
 
 const ROOT_REGEX = /^RW_(.+)_([^_]+)_([^_]+)_([^_]+)_(\d{14})$/i;
@@ -70,10 +80,16 @@ const dom = {
   floatingStationTabsToggleBtn: document.getElementById("floating-station-tabs-toggle-btn"),
   kpiToggleBtn: document.getElementById("kpi-toggle-btn"),
   tableProductTabs: document.getElementById("table-product-tabs"),
+  groupTableProductTabs: document.getElementById("group-table-product-tabs"),
   tableToggleBtn: document.getElementById("table-toggle-btn"),
   scenarioResetBtn: document.getElementById("scenario-reset-btn"),
-  tableContent: document.getElementById("table-content"),
+  tableContentItem: document.getElementById("table-content-item"),
+  tableContentGroup: document.getElementById("table-content-group"),
   siteProductTabs: document.getElementById("site-product-tabs"),
+  chartTabItem: document.getElementById("chart-tab-item"),
+  chartTabGroup: document.getElementById("chart-tab-group"),
+  reportTabItem: document.getElementById("report-tab-item"),
+  reportTabGroup: document.getElementById("report-tab-group"),
   kpiSection: document.getElementById("kpi-section"),
   chartSection: document.getElementById("chart-section"),
   chartSortProduct: document.getElementById("chart-sort-product"),
@@ -86,10 +102,13 @@ const dom = {
   chartFilterVoltageBtn: document.getElementById("chart-filter-voltage-btn"),
   chartFilterVoltageMenu: document.getElementById("chart-filter-voltage-menu"),
   chartToggleBtn: document.getElementById("chart-toggle-btn"),
-  chartContent: document.getElementById("chart-content"),
+  chartContentItem: document.getElementById("chart-content-item"),
+  chartContentGroup: document.getElementById("chart-content-group"),
   tableSection: document.getElementById("table-section"),
   statsThead: document.getElementById("stats-thead"),
   statsTbody: document.getElementById("stats-tbody"),
+  groupStatsThead: document.getElementById("group-stats-thead"),
+  groupStatsTbody: document.getElementById("group-stats-tbody"),
   siteTdSection: document.getElementById("site-td-section"),
   siteTdHeatmap: document.getElementById("site-td-heatmap"),
 };
@@ -107,10 +126,13 @@ dom.floatingStationTabs?.addEventListener("click", onStationTabClick);
 dom.floatingStationTabsToggleBtn?.addEventListener("click", onFloatingStationTabsToggleClick);
 dom.kpiToggleBtn?.addEventListener("click", onKpiToggleClick);
 dom.tableProductTabs?.addEventListener("click", onProductTabClick);
+dom.groupTableProductTabs?.addEventListener("click", onProductTabClick);
 dom.siteProductTabs?.addEventListener("click", onProductTabClick);
 dom.statsThead?.addEventListener("click", onStatsHeadClick);
 dom.statsTbody?.addEventListener("click", onStatsBodyClick);
 dom.statsTbody?.addEventListener("input", onScenarioInputChange);
+dom.groupStatsThead?.addEventListener("click", onGroupStatsHeadClick);
+dom.groupStatsTbody?.addEventListener("input", onGroupScenarioInputChange);
 dom.chartSortProduct?.addEventListener("change", onChartSortProductChange);
 dom.chartFilterProductBtn?.addEventListener("click", onChartProductFilterToggle);
 dom.chartFilterProductMenu?.addEventListener("change", onChartProductFilterItemChange);
@@ -123,6 +145,10 @@ dom.chartFilterVoltageMenu?.addEventListener("change", (event) => onChartMultiFi
 dom.chartToggleBtn?.addEventListener("click", onChartToggleClick);
 dom.tableToggleBtn?.addEventListener("click", onTableToggleClick);
 dom.scenarioResetBtn?.addEventListener("click", onScenarioResetClick);
+dom.chartTabItem?.addEventListener("click", () => switchChartTab("item"));
+dom.chartTabGroup?.addEventListener("click", () => switchChartTab("group"));
+dom.reportTabItem?.addEventListener("click", () => switchReportTab("item"));
+dom.reportTabGroup?.addEventListener("click", () => switchReportTab("group"));
 dom.entryTabAnalysis?.addEventListener("click", () => switchEntryPage("analysis"));
 dom.entryTabXlsx?.addEventListener("click", () => switchEntryPage("xlsx"));
 dom.entryTabGuide?.addEventListener("click", () => switchEntryPage("guide"));
@@ -135,8 +161,11 @@ dom.folderMeta?.addEventListener("input", onMetaInputChange);
 document.addEventListener("click", onDocumentClick);
 
 initializeGuidePage();
+initializeGroupingMapping();
 applyEntryModeUI();
 initializeTheme();
+syncChartTabUI();
+syncReportTabUI();
 syncFloatingStationTabsCollapsedUI();
 
 function applyTheme(theme) {
@@ -158,6 +187,70 @@ function onThemeToggleClick() {
   const theme = toLight ? "light" : "dark";
   applyTheme(theme);
   localStorage.setItem("tto-theme", theme);
+}
+
+function initializeGroupingMapping() {
+  APP.groupingMapByStation = new Map();
+  APP.groupingReady = false;
+  const source = window.GROUPING_RULES_BY_STATION;
+  if (!source || typeof source !== "object") return;
+  for (const [station, itemMap] of Object.entries(source)) {
+    const stationKey = String(station || "").trim().toUpperCase();
+    if (!stationKey || !itemMap || typeof itemMap !== "object") continue;
+    const stationMap = new Map();
+    for (const [testItem, groupName] of Object.entries(itemMap)) {
+      const item = String(testItem || "").trim();
+      const group = String(groupName || "").trim();
+      if (!item || !group) continue;
+      stationMap.set(item, group);
+    }
+    if (stationMap.size > 0) APP.groupingMapByStation.set(stationKey, stationMap);
+  }
+  APP.groupingReady = APP.groupingMapByStation.size > 0;
+  if (APP.groupingReady && hasAnalyzedData()) {
+    renderTable();
+    renderCharts();
+  }
+}
+
+function switchChartTab(tab) {
+  if (tab !== "item" && tab !== "group") return;
+  APP.activeChartTab = tab;
+  syncChartTabUI();
+  syncChartCollapsedUI();
+  renderCharts();
+}
+
+function switchReportTab(tab) {
+  if (tab !== "item" && tab !== "group") return;
+  APP.activeReportTab = tab;
+  syncReportTabUI();
+  syncTableCollapsedUI();
+  renderTable();
+}
+
+function syncChartTabUI() {
+  const isItem = APP.activeChartTab === "item";
+  if (dom.chartTabItem) {
+    dom.chartTabItem.setAttribute("aria-selected", isItem ? "true" : "false");
+    dom.chartTabItem.classList.toggle("is-active", isItem);
+  }
+  if (dom.chartTabGroup) {
+    dom.chartTabGroup.setAttribute("aria-selected", isItem ? "false" : "true");
+    dom.chartTabGroup.classList.toggle("is-active", !isItem);
+  }
+}
+
+function syncReportTabUI() {
+  const isItem = APP.activeReportTab === "item";
+  if (dom.reportTabItem) {
+    dom.reportTabItem.setAttribute("aria-selected", isItem ? "true" : "false");
+    dom.reportTabItem.classList.toggle("is-active", isItem);
+  }
+  if (dom.reportTabGroup) {
+    dom.reportTabGroup.setAttribute("aria-selected", isItem ? "false" : "true");
+    dom.reportTabGroup.classList.toggle("is-active", !isItem);
+  }
 }
 
 function onPickSourceClick() {
@@ -473,7 +566,11 @@ function resetResultsUI() {
   APP.chartSortProduct = "";
   APP.chartFilters = { product: [], process: [], density: [], voltage: [] };
   APP.scenarioOverrides.clear();
+  APP.groupScenarioOverrides.clear();
   APP.tableExpanded.clear();
+  APP.activeChartTab = "item";
+  APP.activeReportTab = "item";
+  APP.groupTableSort = { key: "mean", dir: "desc" };
   APP.tableCollapsed = true;
   APP.scopeCollapsed = false;
   APP.kpiCollapsed = false;
@@ -490,6 +587,7 @@ function resetResultsUI() {
   if (dom.stationTabs) dom.stationTabs.innerHTML = "";
   if (dom.floatingStationTabs) dom.floatingStationTabs.innerHTML = "";
   if (dom.tableProductTabs) dom.tableProductTabs.innerHTML = "";
+  if (dom.groupTableProductTabs) dom.groupTableProductTabs.innerHTML = "";
   if (dom.siteProductTabs) dom.siteProductTabs.innerHTML = "";
   if (dom.chartSortProduct) dom.chartSortProduct.innerHTML = "";
   if (dom.chartFilterProductBtn) dom.chartFilterProductBtn.textContent = "全部產品";
@@ -501,8 +599,11 @@ function resetResultsUI() {
   if (dom.chartFilterVoltageBtn) dom.chartFilterVoltageBtn.textContent = "全部 Voltage";
   if (dom.chartFilterVoltageMenu) dom.chartFilterVoltageMenu.innerHTML = "";
   dom.statsTbody.innerHTML = "";
+  if (dom.groupStatsTbody) dom.groupStatsTbody.innerHTML = "";
   dom.progressWrap.classList.add("hidden");
   setProgress(0);
+  syncChartTabUI();
+  syncReportTabUI();
   syncTableCollapsedUI();
   syncKpiCollapsedUI();
   syncChartCollapsedUI();
@@ -523,8 +624,9 @@ function resetResultsUI() {
 }
 
 function syncTableCollapsedUI() {
-  if (!dom.tableContent || !dom.tableToggleBtn) return;
-  dom.tableContent.classList.toggle("hidden", APP.tableCollapsed);
+  if (!dom.tableToggleBtn) return;
+  dom.tableContentItem?.classList.toggle("hidden", APP.tableCollapsed || APP.activeReportTab !== "item");
+  dom.tableContentGroup?.classList.toggle("hidden", APP.tableCollapsed || APP.activeReportTab !== "group");
   dom.tableToggleBtn.textContent = APP.tableCollapsed ? "展開全部" : "收合全部";
   dom.tableToggleBtn.setAttribute("aria-expanded", APP.tableCollapsed ? "false" : "true");
 }
@@ -548,8 +650,9 @@ function onKpiToggleClick() {
 }
 
 function syncChartCollapsedUI() {
-  if (!dom.chartContent || !dom.chartToggleBtn) return;
-  dom.chartContent.classList.toggle("hidden", APP.chartCollapsed);
+  if (!dom.chartToggleBtn) return;
+  dom.chartContentItem?.classList.toggle("hidden", APP.chartCollapsed || APP.activeChartTab !== "item");
+  dom.chartContentGroup?.classList.toggle("hidden", APP.chartCollapsed || APP.activeChartTab !== "group");
   dom.chartToggleBtn.textContent = APP.chartCollapsed ? "展開全部" : "收合全部";
   dom.chartToggleBtn.setAttribute("aria-expanded", APP.chartCollapsed ? "false" : "true");
 }
@@ -1369,6 +1472,7 @@ function renderStationTabHost(host, stationNames) {
 function renderProductTabs() {
   const productsInStation = getProductsInStation(APP.activeStation);
   syncProductTabHost(dom.tableProductTabs, productsInStation);
+  syncProductTabHost(dom.groupTableProductTabs, productsInStation);
   syncProductTabHost(dom.siteProductTabs, productsInStation);
 }
 
@@ -1503,8 +1607,27 @@ function onScenarioInputChange(event) {
   renderCharts();
 }
 
+function onGroupScenarioInputChange(event) {
+  const input = event.target;
+  if (!(input instanceof HTMLInputElement)) return;
+  if (!input.matches("[data-group-scenario-field]")) return;
+  const field = input.getAttribute("data-group-scenario-field");
+  const stationName = input.getAttribute("data-group-scenario-station");
+  const productName = input.getAttribute("data-group-scenario-product");
+  const groupName = input.getAttribute("data-group-scenario-name");
+  if (!field || !stationName || !productName || !groupName) return;
+  const groupStats = buildGroupStats(productName, stationName);
+  const stat = groupStats.find((entry) => entry.group === groupName);
+  if (!stat || (field !== "mean" && field !== "range")) return;
+  const next = Number.parseFloat(input.value);
+  applyGroupScenarioOverride(productName, stationName, groupName, field, next, stat[field]);
+  syncGroupScenarioCells();
+  renderCharts();
+}
+
 function onScenarioResetClick() {
   APP.scenarioOverrides.clear();
+  APP.groupScenarioOverrides.clear();
   renderTable();
   renderCharts();
 }
@@ -1520,6 +1643,31 @@ function onStatsHeadClick(event) {
     APP.tableSort.dir = key === "testItem" ? "asc" : "desc";
   }
   renderTable();
+}
+
+function onGroupStatsHeadClick(event) {
+  const btn = event.target instanceof Element ? event.target.closest("[data-group-sort-key]") : null;
+  if (!btn) return;
+  const key = btn.getAttribute("data-group-sort-key");
+  if (!key) return;
+  if (APP.groupTableSort.key === key) APP.groupTableSort.dir = APP.groupTableSort.dir === "asc" ? "desc" : "asc";
+  else {
+    APP.groupTableSort.key = key;
+    APP.groupTableSort.dir = key === "group" ? "asc" : "desc";
+  }
+  renderTable();
+}
+
+function renderGroupSortHeaderState() {
+  if (!dom.groupStatsThead) return;
+  const sortButtons = dom.groupStatsThead.querySelectorAll("[data-group-sort-key]");
+  for (const btn of sortButtons) {
+    const key = btn.getAttribute("data-group-sort-key");
+    const isSorted = key === APP.groupTableSort.key;
+    btn.classList.toggle("is-sorted", isSorted);
+    btn.classList.toggle("asc", isSorted && APP.groupTableSort.dir === "asc");
+    btn.classList.toggle("desc", isSorted && APP.groupTableSort.dir === "desc");
+  }
 }
 
 function renderSortHeaderState() {
@@ -1727,7 +1875,158 @@ function sortStats(stats, sortKey, sortDir) {
   });
 }
 
-function renderTable() {
+function resolveGroupName(stationName, testItem) {
+  const stationKey = String(stationName || "").trim().toUpperCase();
+  const stationMap = APP.groupingMapByStation.get(stationKey);
+  const mapped = stationMap?.get(String(testItem || "").trim());
+  return mapped || "未分組";
+}
+
+function buildGroupStats(productName, stationName) {
+  const product = getProductByName(productName);
+  const station = product?.stations.get(stationName);
+  if (!product || !station) return [];
+  const groupMap = new Map();
+  for (const stat of station.stats) {
+    const groupName = resolveGroupName(station.name, stat.testItem);
+    const row = groupMap.get(groupName) ?? {
+      group: groupName,
+      count: 0,
+      meanWeightedSum: 0,
+      medianWeightedSum: 0,
+      range: 0,
+      min: Number.POSITIVE_INFINITY,
+      minSite: "Unknown",
+      minTd: "Unknown",
+      max: Number.NEGATIVE_INFINITY,
+      maxSite: "Unknown",
+      maxTd: "Unknown",
+    };
+    row.count += stat.count;
+    row.meanWeightedSum += stat.mean * stat.count;
+    row.medianWeightedSum += stat.median * stat.count;
+    row.range = Math.max(row.range, stat.range);
+    if (stat.min < row.min) {
+      row.min = stat.min;
+      row.minSite = stat.minSite;
+      row.minTd = stat.minTd;
+    }
+    if (stat.max > row.max) {
+      row.max = stat.max;
+      row.maxSite = stat.maxSite;
+      row.maxTd = stat.maxTd;
+    }
+    groupMap.set(groupName, row);
+  }
+  const stationTotal = station.stationTotalTime > 0 ? station.stationTotalTime : 0;
+  return Array.from(groupMap.values())
+    .map((row) => {
+      const mean = row.count > 0 ? row.meanWeightedSum / row.count : 0;
+      const median = row.count > 0 ? row.medianWeightedSum / row.count : 0;
+      const ttRatio = stationTotal > 0 ? (row.meanWeightedSum / stationTotal) * 100 : 0;
+      return {
+        group: row.group,
+        count: row.count,
+        mean,
+        median,
+        range: row.range,
+        min: Number.isFinite(row.min) ? row.min : 0,
+        max: Number.isFinite(row.max) ? row.max : 0,
+        minSite: row.minSite,
+        minTd: row.minTd,
+        maxSite: row.maxSite,
+        maxTd: row.maxTd,
+        ttRatio,
+      };
+    })
+    .sort((a, b) => (b.mean !== a.mean ? b.mean - a.mean : a.group.localeCompare(b.group)));
+}
+
+function makeGroupScenarioOverrideKey(productName, stationName, groupName) {
+  return `${String(productName || "").trim()}||${String(stationName || "").trim()}||${String(groupName || "").trim()}`;
+}
+
+function getGroupScenarioOverride(productName, stationName, groupName) {
+  return APP.groupScenarioOverrides.get(makeGroupScenarioOverrideKey(productName, stationName, groupName)) || null;
+}
+
+function applyGroupScenarioOverride(productName, stationName, groupName, field, nextValue, baseValue) {
+  const key = makeGroupScenarioOverrideKey(productName, stationName, groupName);
+  const current = APP.groupScenarioOverrides.get(key) || {};
+  if (Number.isFinite(nextValue) && nextValue >= 0 && nextValue !== baseValue) current[field] = nextValue;
+  else delete current[field];
+  if (!Number.isFinite(current.mean) && !Number.isFinite(current.range)) APP.groupScenarioOverrides.delete(key);
+  else APP.groupScenarioOverrides.set(key, current);
+}
+
+function getGroupScenarioMean(stat, productName, stationName) {
+  const override = getGroupScenarioOverride(productName, stationName, stat.group);
+  return Number.isFinite(override?.mean) ? override.mean : stat.mean;
+}
+
+function getGroupScenarioRange(stat, productName, stationName) {
+  const override = getGroupScenarioOverride(productName, stationName, stat.group);
+  return Number.isFinite(override?.range) ? override.range : stat.range;
+}
+
+function getGroupScenarioEffectiveMean(stat, productName, stationName) {
+  const scenarioMean = getGroupScenarioMean(stat, productName, stationName);
+  const scenarioRange = getGroupScenarioRange(stat, productName, stationName);
+  const baseRange = Number(stat.range);
+  const rangeFactor = Number.isFinite(baseRange) && baseRange > 0 ? scenarioRange / baseRange : 1;
+  const effective = scenarioMean * (Number.isFinite(rangeFactor) && rangeFactor > 0 ? rangeFactor : 1);
+  return Number.isFinite(effective) && effective >= 0 ? effective : 0;
+}
+
+function getGroupScenarioStationTotalTime(productName, stationName) {
+  const stats = buildGroupStats(productName, stationName);
+  if (!stats.length) return 0;
+  return stats.reduce((acc, stat) => acc + getGroupScenarioEffectiveMean(stat, productName, stationName) * stat.count, 0);
+}
+
+function getGroupScenarioTtRatio(stat, productName, stationName, scenarioStationTotal = null) {
+  const stationTotal = Number.isFinite(scenarioStationTotal) ? scenarioStationTotal : getGroupScenarioStationTotalTime(productName, stationName);
+  if (!Number.isFinite(stationTotal) || stationTotal <= 0) return 0;
+  return (getGroupScenarioEffectiveMean(stat, productName, stationName) * stat.count / stationTotal) * 100;
+}
+
+function hasGroupScenarioOverrideForProduct(productName) {
+  const productPrefix = `${String(productName || "").trim()}||`;
+  for (const key of APP.groupScenarioOverrides.keys()) {
+    if (String(key).startsWith(productPrefix)) return true;
+  }
+  return false;
+}
+
+function sortGroupStats(stats, sortKey, sortDir) {
+  const sign = sortDir === "asc" ? 1 : -1;
+  return stats.slice().sort((a, b) => {
+    if (sortKey === "group") return a.group.localeCompare(b.group) * sign;
+    const av = a[sortKey] ?? 0;
+    const bv = b[sortKey] ?? 0;
+    if (av === bv) return a.group.localeCompare(b.group);
+    return (av - bv) * sign;
+  });
+}
+
+function syncGroupScenarioCells() {
+  const product = getActiveProduct();
+  const station = getActiveStationData();
+  if (!product || !station || !dom.groupStatsTbody) return;
+  const statMap = new Map(buildGroupStats(product.name, station.name).map((s) => [s.group, s]));
+  const scenarioStationTotal = getGroupScenarioStationTotalTime(product.name, station.name);
+  const rows = dom.groupStatsTbody.querySelectorAll("tr[data-group-scenario-row='true']");
+  for (const row of rows) {
+    const groupName = row.getAttribute("data-group-scenario-name");
+    if (!groupName) continue;
+    const stat = statMap.get(groupName);
+    if (!stat) continue;
+    const ratioCell = row.querySelector("[data-group-scenario-tt-ratio='true']");
+    if (ratioCell) ratioCell.textContent = fmt(getGroupScenarioTtRatio(stat, product.name, station.name, scenarioStationTotal));
+  }
+}
+
+function renderItemTable() {
   const product = getActiveProduct();
   const station = getActiveStationData();
   if (!product || !station) {
@@ -1774,6 +2073,55 @@ function renderTable() {
   renderSortHeaderState();
   syncTableCollapsedUI();
   dom.tableSection.classList.remove("hidden");
+}
+
+function renderGroupTable() {
+  const product = getActiveProduct();
+  const station = getActiveStationData();
+  if (!product || !station || !dom.groupStatsTbody) {
+    dom.tableSection.classList.add("hidden");
+    APP.tableCollapsed = true;
+    syncTableCollapsedUI();
+    return;
+  }
+  const sorted = sortGroupStats(buildGroupStats(product.name, station.name), APP.groupTableSort.key, APP.groupTableSort.dir);
+  const scenarioStationTotal = getGroupScenarioStationTotalTime(product.name, station.name);
+  dom.groupStatsTbody.innerHTML = sorted
+    .map((s) => {
+      const scenarioMean = getGroupScenarioMean(s, product.name, station.name);
+      const scenarioRange = getGroupScenarioRange(s, product.name, station.name);
+      const scenarioRatio = getGroupScenarioTtRatio(s, product.name, station.name, scenarioStationTotal);
+      return `
+      <tr data-group-scenario-row="true" data-group-scenario-name="${escapeHtml(s.group)}">
+        <td></td>
+        <td title="${escapeHtml(s.group)}">${escapeHtml(s.group)}</td>
+        <td>${s.count}</td>
+        <td>${fmt(s.mean)}</td>
+        <td>${fmt(s.median)}</td>
+        <td>${fmt(s.range)}</td>
+        <td>${fmt(s.ttRatio)}</td>
+        <td><input type="number" min="0" step="0.000001" class="scenario-input" data-group-scenario-field="mean" data-group-scenario-product="${escapeHtml(product.name)}" data-group-scenario-station="${escapeHtml(station.name)}" data-group-scenario-name="${escapeHtml(s.group)}" value="${escapeHtml(fmt(scenarioMean))}"></td>
+        <td><input type="number" min="0" step="0.000001" class="scenario-input" data-group-scenario-field="range" data-group-scenario-product="${escapeHtml(product.name)}" data-group-scenario-station="${escapeHtml(station.name)}" data-group-scenario-name="${escapeHtml(s.group)}" value="${escapeHtml(fmt(scenarioRange))}"></td>
+        <td data-group-scenario-tt-ratio="true">${fmt(scenarioRatio)}</td>
+        <td>${fmt(s.min)}</td>
+        <td>${escapeHtml(formatSiteTdSource(s.minSite, s.minTd))}</td>
+        <td>${fmt(s.max)}</td>
+        <td>${escapeHtml(formatSiteTdSource(s.maxSite, s.maxTd))}</td>
+      </tr>`;
+    })
+    .join("");
+  renderGroupSortHeaderState();
+  syncTableCollapsedUI();
+  dom.tableSection.classList.remove("hidden");
+}
+
+function renderTable() {
+  syncReportTabUI();
+  if (APP.activeReportTab === "group") {
+    renderGroupTable();
+    return;
+  }
+  renderItemTable();
 }
 
 function syncScenarioCells() {
@@ -1973,15 +2321,23 @@ function renderChartSortOptions() {
   dom.chartSortProduct.value = APP.chartSortProduct || productsInStation[0]?.name || "";
 }
 
-function buildChartLabels(items) {
-  return items.map((s) => (s.testItem.length > 32 ? `${s.testItem.slice(0, 32)}...` : s.testItem));
+function buildChartLabels(items, labelKey = "testItem") {
+  return items.map((s) => {
+    const text = String(s?.[labelKey] || "");
+    return text.length > 32 ? `${text.slice(0, 32)}...` : text;
+  });
 }
 
-function getTopByMetric(stats, metricKey, valueResolver = null) {
+function getTopByMetric(stats, metricKey, valueResolver = null, labelKey = "testItem") {
   const resolver = typeof valueResolver === "function" ? valueResolver : (s) => s?.[metricKey] ?? 0;
   return stats
     .slice()
-    .sort((a, b) => ((resolver(b) - resolver(a)) !== 0 ? (resolver(b) - resolver(a)) : a.testItem.localeCompare(b.testItem)))
+    .sort((a, b) => {
+      const labelA = String(a?.[labelKey] || "");
+      const labelB = String(b?.[labelKey] || "");
+      const diff = resolver(b) - resolver(a);
+      return diff !== 0 ? diff : labelA.localeCompare(labelB);
+    })
     .slice(0, 15);
 }
 
@@ -2008,6 +2364,57 @@ function renderMetricChart(canvasId, metricKey, label, colorFallback) {
     return {
       label: product.name,
       data: rawItems.map((item) => metricValueWithScenario(statMap.get(item), metricKey, product.name, APP.activeStation, scenarioStationTotal)),
+      backgroundColor: PRODUCT_COLORS[idx % PRODUCT_COLORS.length] || colorFallback,
+    };
+  });
+
+  return new Chart(canvas, {
+    type: "bar",
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: "#cbd5e1" }, title: { display: true, text: label } } },
+      scales: {
+        x: { ticks: { color: "#94a3b8" }, grid: { color: "#1e293b" } },
+        y: { ticks: { color: "#94a3b8" }, grid: { color: "#1e293b" } },
+      },
+    },
+  });
+}
+
+function groupMetricValueWithScenario(stat, metric, productName, stationName, scenarioStationTotal = null) {
+  if (!stat) return 0;
+  if (metric === "count") return stat.count;
+  if (metric === "mean") return Number(getGroupScenarioMean(stat, productName, stationName).toFixed(6));
+  if (metric === "range") return Number(getGroupScenarioRange(stat, productName, stationName).toFixed(6));
+  return Number(getGroupScenarioTtRatio(stat, productName, stationName, scenarioStationTotal).toFixed(6));
+}
+
+function renderGroupMetricChart(canvasId, metricKey, label, colorFallback) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
+  const productsInStation = getChartFilteredProductsInStation(APP.activeStation);
+  if (!productsInStation.length) return null;
+
+  const sortProduct = getProductByName(APP.chartSortProduct) ?? productsInStation[0];
+  const sortStats = buildGroupStats(sortProduct.name, APP.activeStation);
+  const sortScenarioTotal = getGroupScenarioStationTotalTime(sortProduct.name, APP.activeStation);
+  const top = getTopByMetric(
+    sortStats,
+    metricKey,
+    (stat) => groupMetricValueWithScenario(stat, metricKey, sortProduct.name, APP.activeStation, sortScenarioTotal),
+    "group",
+  );
+  const labels = buildChartLabels(top, "group");
+  const rawGroups = top.map((item) => item.group);
+  const datasets = productsInStation.map((product, idx) => {
+    const groupStats = buildGroupStats(product.name, APP.activeStation);
+    const statMap = new Map(groupStats.map((s) => [s.group, s]));
+    const scenarioStationTotal = getGroupScenarioStationTotalTime(product.name, APP.activeStation);
+    return {
+      label: product.name,
+      data: rawGroups.map((groupName) => groupMetricValueWithScenario(statMap.get(groupName), metricKey, product.name, APP.activeStation, scenarioStationTotal)),
       backgroundColor: PRODUCT_COLORS[idx % PRODUCT_COLORS.length] || colorFallback,
     };
   });
@@ -2104,6 +2511,91 @@ function renderStationReductionChart() {
   });
 }
 
+function renderGroupStationReductionChart(
+  canvasId = "group-tt-reduction-chart",
+  titleText = "Scenario vs Baseline（By 產品；全部站點合計）",
+  options = {},
+) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
+  const requireOverrides = options.requireOverrides === true;
+  const rows = getProducts()
+    .filter((product) => {
+      const productFilters = Array.isArray(APP.chartFilters.product) ? APP.chartFilters.product : [];
+      const processFilters = Array.isArray(APP.chartFilters.process) ? APP.chartFilters.process.map(normalizeFilterValue).filter(Boolean) : [];
+      const densityFilters = Array.isArray(APP.chartFilters.density) ? APP.chartFilters.density.map(normalizeFilterValue).filter(Boolean) : [];
+      const voltageFilters = Array.isArray(APP.chartFilters.voltage) ? APP.chartFilters.voltage.map(normalizeFilterValue).filter(Boolean) : [];
+      if (productFilters.length > 0 && !productFilters.includes(product.name)) return false;
+      if (processFilters.length > 0 && !processFilters.includes(normalizeFilterValue(product.process))) return false;
+      if (densityFilters.length > 0 && !densityFilters.includes(normalizeFilterValue(product.density))) return false;
+      if (voltageFilters.length > 0 && !voltageFilters.includes(normalizeFilterValue(product.voltage))) return false;
+      return true;
+    })
+    .map((product) => {
+      let baselineTotal = 0;
+      let scenarioTotal = 0;
+      const hasOverride = hasGroupScenarioOverrideForProduct(product.name);
+      for (const station of product.stations.values()) {
+        const baseSeconds = station?.stationTotalTime || 0;
+        if (baseSeconds <= 0) continue;
+        baselineTotal += baseSeconds;
+        scenarioTotal += hasOverride ? getGroupScenarioStationTotalTime(product.name, station.name) : baseSeconds;
+      }
+      if (baselineTotal <= 0) return null;
+      const reductionPct = hasOverride ? ((baselineTotal - scenarioTotal) / baselineTotal) * 100 : 0;
+      return {
+        productName: product.name,
+        baselineTotal,
+        scenarioTotal,
+        reductionPct: Number(reductionPct.toFixed(6)),
+        hasOverride,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.productName.localeCompare(b.productName));
+
+  if (!rows.length) return null;
+
+  return new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels: rows.map((row) => row.productName),
+      datasets: [{
+        label: "所有站點總時間縮減比例 (%)",
+        data: rows.map((row) => (requireOverrides && !row.hasOverride ? null : row.reductionPct)),
+        backgroundColor: rows.map((_, idx) => PRODUCT_COLORS[idx % PRODUCT_COLORS.length] || "#f97316"),
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: "#cbd5e1" }, title: { display: true, text: titleText } },
+        tooltip: {
+          callbacks: {
+            label: (context) => {
+              const productName = String(context.label || "");
+              const row = rows.find((item) => item.productName === productName);
+              if (!row) return "";
+              if (requireOverrides && !row.hasOverride) return `${productName}：尚未輸入群組化報表模擬數據`;
+              return `${productName}：降低 ${row.reductionPct.toFixed(2)}%（舊 ${fmt(row.baselineTotal)}s → 新 ${fmt(row.scenarioTotal)}s）`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { color: "#94a3b8" }, grid: { color: "#1e293b" } },
+        y: {
+          beginAtZero: true,
+          ticks: { color: "#94a3b8", callback: (value) => `${value}%` },
+          grid: { color: "#1e293b" },
+          title: { display: true, text: "降低百分比 (%)", color: "#94a3b8" },
+        },
+      },
+    },
+  });
+}
+
 function renderCharts() {
   for (const key of Object.keys(APP.charts)) {
     if (APP.charts[key]) {
@@ -2115,16 +2607,30 @@ function renderCharts() {
     dom.chartSection.classList.add("hidden");
     return;
   }
+  syncChartTabUI();
   syncChartCollapsedUI();
   if (APP.chartCollapsed) {
     dom.chartSection.classList.remove("hidden");
     return;
   }
-  APP.charts.count = renderMetricChart("count-chart", "count", "Count", "#3b82f6");
-  APP.charts.mean = renderMetricChart("mean-chart", "mean", "Mean (s)", "#10b981");
-  APP.charts.range = renderMetricChart("range-chart", "range", "Range (s)", "#f59e0b");
-  APP.charts.ratio = renderMetricChart("tt-ratio-chart", "ttRatio", "TT Ratio/站點 (%)", "#a855f7");
-  APP.charts.reduction = renderStationReductionChart();
+  if (APP.activeChartTab === "group") {
+    APP.charts.groupCount = renderGroupMetricChart("group-count-chart", "count", "Group Count", "#3b82f6");
+    APP.charts.groupMean = renderGroupMetricChart("group-mean-chart", "mean", "Group Mean (s)", "#10b981");
+    APP.charts.groupRange = renderGroupMetricChart("group-range-chart", "range", "Group Range (s)", "#f59e0b");
+    APP.charts.groupRatio = renderGroupMetricChart("group-tt-ratio-chart", "ttRatio", "Group TT Ratio/站點 (%)", "#a855f7");
+    APP.charts.groupReduction = renderGroupStationReductionChart();
+  } else {
+    APP.charts.count = renderMetricChart("count-chart", "count", "Count", "#3b82f6");
+    APP.charts.mean = renderMetricChart("mean-chart", "mean", "Mean (s)", "#10b981");
+    APP.charts.range = renderMetricChart("range-chart", "range", "Range (s)", "#f59e0b");
+    APP.charts.ratio = renderMetricChart("tt-ratio-chart", "ttRatio", "TT Ratio/站點 (%)", "#a855f7");
+    APP.charts.reduction = renderStationReductionChart();
+    APP.charts.groupReductionFromReport = renderGroupStationReductionChart(
+      "group-sim-tt-reduction-chart",
+      "Scenario vs Baseline（來源：群組化報表模擬；By 產品；全部站點合計）",
+      { requireOverrides: true },
+    );
+  }
   dom.chartSection.classList.remove("hidden");
 }
 

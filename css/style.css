@@ -953,6 +953,27 @@ body.theme-light .progress-track {
   flex-wrap: wrap;
 }
 
+.chart-tabs,
+.report-tabs {
+  border-bottom: none;
+  padding: 0.25rem 0 0;
+}
+
+.chart-tabs .station-tab-btn,
+.report-tabs .station-tab-btn {
+  border-radius: 0.65rem;
+  border: 1px solid #334155;
+  margin-bottom: 0;
+  margin-right: 0.35rem;
+  padding: 0.32rem 0.75rem;
+  font-size: 0.82rem;
+}
+
+.chart-tabs .station-tab-btn[aria-selected="true"],
+.report-tabs .station-tab-btn[aria-selected="true"] {
+  border-bottom-color: #334155;
+}
+
 .chart-control-group {
   display: flex;
   align-items: center;
