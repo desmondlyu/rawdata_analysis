@@ -3,6 +3,7 @@ const APP = {
   rootName: "",
   entryMode: "analysis",
   sourceMode: "none",
+  importWorkspaceCollapsed: false,
   manualProductName: "",
   manualFallback: { lotNo: "", waferId: "", station: "", pendingFiles: [] },
   products: new Map(),
@@ -54,18 +55,24 @@ const dom = {
   folderName: document.getElementById("folder-name"),
   folderMeta: document.getElementById("folder-meta"),
   scopeSelectPanel: document.getElementById("scope-select-panel"),
+  scopeSelectBody: document.getElementById("scope-select-body"),
   scopeSelectSummary: document.getElementById("scope-select-summary"),
   scopeSelectList: document.getElementById("scope-select-list"),
   scopeSelectAll: document.getElementById("scope-select-all"),
   scopeSelectNone: document.getElementById("scope-select-none"),
   scopeToggleBtn: document.getElementById("scope-toggle-btn"),
+  importWorkspaceBody: document.getElementById("import-workspace-body"),
+  importWorkspaceToggleBtn: document.getElementById("import-workspace-toggle-btn"),
   entryTabAnalysis: document.getElementById("entry-tab-analysis"),
-  entryTabXlsx: document.getElementById("entry-tab-xlsx"),
   entryTabGuide: document.getElementById("entry-tab-guide"),
   themeToggleBtn: document.getElementById("theme-toggle-btn"),
   analysisPage: document.getElementById("analysis-page"),
   guidePage: document.getElementById("guide-page"),
   guideContent: document.getElementById("guide-content"),
+  exampleImage: document.querySelector(".import-example-image"),
+  imageLightbox: document.getElementById("image-lightbox"),
+  imageLightboxImg: document.getElementById("image-lightbox-img"),
+  imageLightboxClose: document.getElementById("image-lightbox-close"),
   message: document.getElementById("message"),
   manualEntryHint: document.getElementById("manual-entry-hint"),
   analyzeBtn: document.getElementById("analyze-btn"),
@@ -138,15 +145,22 @@ dom.scenarioResetBtn?.addEventListener("click", onScenarioResetClick);
 dom.chartTabItem?.addEventListener("click", () => switchChartTab("item"));
 dom.chartTabGroup?.addEventListener("click", () => switchChartTab("group"));
 dom.entryTabAnalysis?.addEventListener("click", () => switchEntryPage("analysis"));
-dom.entryTabXlsx?.addEventListener("click", () => switchEntryPage("xlsx"));
 dom.entryTabGuide?.addEventListener("click", () => switchEntryPage("guide"));
 dom.themeToggleBtn?.addEventListener("click", onThemeToggleClick);
 dom.scopeSelectList?.addEventListener("change", onScopeSelectionChange);
 dom.scopeSelectAll?.addEventListener("click", () => toggleAllScopes(true));
 dom.scopeSelectNone?.addEventListener("click", () => toggleAllScopes(false));
 dom.scopeToggleBtn?.addEventListener("click", onScopeToggleClick);
+dom.importWorkspaceToggleBtn?.addEventListener("click", onImportWorkspaceToggleClick);
 dom.folderMeta?.addEventListener("input", onMetaInputChange);
+dom.exampleImage?.addEventListener("click", onZoomableImageClick);
+dom.imageLightboxClose?.addEventListener("click", closeImageLightbox);
+dom.imageLightbox?.addEventListener("click", onLightboxBackdropClick);
+for (const radio of dom.sourceModeRadios) {
+  radio.addEventListener("change", onSourceModeRadioChange);
+}
 document.addEventListener("click", onDocumentClick);
+document.addEventListener("keydown", onDocumentKeydown);
 
 initializeGuidePage();
 initializeGroupingMapping();
@@ -154,6 +168,7 @@ applyEntryModeUI();
 initializeTheme();
 syncChartTabUI();
 syncFloatingStationTabsCollapsedUI();
+syncImportWorkspaceCollapsedUI();
 
 function applyTheme(theme) {
   const isLight = theme === "light";
@@ -174,6 +189,47 @@ function onThemeToggleClick() {
   const theme = toLight ? "light" : "dark";
   applyTheme(theme);
   localStorage.setItem("tto-theme", theme);
+}
+
+function onZoomableImageClick(event) {
+  const img = event.target;
+  if (!(img instanceof HTMLImageElement)) return;
+  openImageLightbox(img.currentSrc || img.src, img.alt || "放大圖片");
+}
+
+function onLightboxBackdropClick(event) {
+  if (event.target !== dom.imageLightbox) return;
+  closeImageLightbox();
+}
+
+function onDocumentKeydown(event) {
+  if (event.key !== "Escape") return;
+  if (!dom.imageLightbox || dom.imageLightbox.classList.contains("hidden")) return;
+  closeImageLightbox();
+}
+
+function openImageLightbox(src, alt) {
+  if (!dom.imageLightbox || !dom.imageLightboxImg) return;
+  dom.imageLightboxImg.src = String(src || "");
+  dom.imageLightboxImg.alt = String(alt || "放大圖片");
+  dom.imageLightbox.classList.remove("hidden");
+  dom.imageLightbox.setAttribute("aria-hidden", "false");
+}
+
+function closeImageLightbox() {
+  if (!dom.imageLightbox || !dom.imageLightboxImg) return;
+  dom.imageLightbox.classList.add("hidden");
+  dom.imageLightbox.setAttribute("aria-hidden", "true");
+  dom.imageLightboxImg.src = "";
+}
+
+function bindZoomableImages(container) {
+  if (!container) return;
+  const images = container.querySelectorAll("img");
+  for (const image of images) {
+    image.classList.add("js-zoomable");
+    image.addEventListener("click", onZoomableImageClick);
+  }
 }
 
 function initializeGroupingMapping() {
@@ -221,16 +277,28 @@ function syncChartTabUI() {
 }
 
 function onPickSourceClick() {
-  if (APP.entryMode === "xlsx") {
+  const selected = getSelectedSourceMode();
+  if (selected === "xlsx") {
     dom.xlsxInput.value = "";
     dom.xlsxInput.click();
     return;
   }
-  const selected = Array.from(dom.sourceModeRadios).find((r) => r.checked)?.value ?? "folder";
   if (selected === "folder") {
     dom.folderInput.value = "";
     dom.folderInput.click();
     return;
+  }
+
+  function getSelectedSourceMode() {
+    return Array.from(dom.sourceModeRadios).find((r) => r.checked)?.value ?? "folder";
+  }
+
+  function onSourceModeRadioChange() {
+    const selected = getSelectedSourceMode();
+    APP.sourceMode = selected;
+    syncSourceModeUI();
+    renderScopeSelection();
+    updateAnalyzeState();
   }
   dom.txtInput.value = "";
   dom.txtInput.click();
@@ -501,10 +569,22 @@ function toggleAllScopes(checked) {
 }
 
 function syncScopeCollapsedUI() {
-  if (!dom.scopeSelectList || !dom.scopeToggleBtn) return;
-  dom.scopeSelectList.classList.toggle("hidden", APP.scopeCollapsed);
+  if (!dom.scopeToggleBtn || !dom.scopeSelectBody) return;
+  dom.scopeSelectBody.classList.toggle("hidden", APP.scopeCollapsed);
   dom.scopeToggleBtn.textContent = APP.scopeCollapsed ? "展開全部" : "收合全部";
   dom.scopeToggleBtn.setAttribute("aria-expanded", APP.scopeCollapsed ? "false" : "true");
+}
+
+function syncImportWorkspaceCollapsedUI() {
+  if (!dom.importWorkspaceBody || !dom.importWorkspaceToggleBtn) return;
+  dom.importWorkspaceBody.classList.toggle("hidden", APP.importWorkspaceCollapsed);
+  dom.importWorkspaceToggleBtn.textContent = APP.importWorkspaceCollapsed ? "展開全部" : "收合全部";
+  dom.importWorkspaceToggleBtn.setAttribute("aria-expanded", APP.importWorkspaceCollapsed ? "false" : "true");
+}
+
+function onImportWorkspaceToggleClick() {
+  APP.importWorkspaceCollapsed = !APP.importWorkspaceCollapsed;
+  syncImportWorkspaceCollapsedUI();
 }
 
 function onScopeToggleClick() {
@@ -540,6 +620,7 @@ function resetResultsUI() {
   APP.activeChartTab = "item";
   APP.tableCollapsed = true;
   APP.scopeCollapsed = false;
+  APP.importWorkspaceCollapsed = false;
   APP.kpiCollapsed = false;
   APP.chartCollapsed = false;
   APP.floatingStationTabsCollapsed = false;
@@ -572,6 +653,7 @@ function resetResultsUI() {
   syncKpiCollapsedUI();
   syncChartCollapsedUI();
   syncFloatingStationTabsCollapsedUI();
+  syncImportWorkspaceCollapsedUI();
 
   destroyKpiCharts();
   for (const key of Object.keys(APP.charts)) {
@@ -1135,6 +1217,8 @@ async function startAnalysis() {
   renderTable();
   renderCharts();
   renderSiteTdChart();
+  APP.importWorkspaceCollapsed = true;
+  syncImportWorkspaceCollapsedUI();
   showMessage(
     `分析完成：共 ${getProducts().length} 產品、${stationsWithStats.length} 站點、${getProducts().reduce((acc, p) => acc + Array.from(p.stations.values()).reduce((s, st) => s + st.stats.length, 0), 0)} 個 Test Item。`,
     "success",
@@ -1192,6 +1276,8 @@ async function startAnalysisFromXlsx() {
   renderTable();
   renderCharts();
   renderSiteTdChart();
+  APP.importWorkspaceCollapsed = true;
+  syncImportWorkspaceCollapsedUI();
   showMessage(`XLSX 匯入完成：共 ${getProducts().length} 產品、${stationNames.length} 站點。`, "success");
   updateAnalyzeState();
 }
@@ -3310,19 +3396,14 @@ function escapeHtml(text) {
 
 function switchEntryPage(target) {
   const isGuide = target === "guide";
-  const isXlsx = target === "xlsx";
-  APP.entryMode = isGuide ? "guide" : (isXlsx ? "xlsx" : "analysis");
+  APP.entryMode = isGuide ? "guide" : "analysis";
   dom.analysisPage?.classList.toggle("hidden", isGuide);
   dom.guidePage?.classList.toggle("hidden", !isGuide);
 
   if (dom.entryTabAnalysis) {
-    const active = !isGuide && !isXlsx;
+    const active = !isGuide;
     dom.entryTabAnalysis.classList.toggle("is-active", active);
     dom.entryTabAnalysis.setAttribute("aria-selected", active ? "true" : "false");
-  }
-  if (dom.entryTabXlsx) {
-    dom.entryTabXlsx.classList.toggle("is-active", isXlsx);
-    dom.entryTabXlsx.setAttribute("aria-selected", isXlsx ? "true" : "false");
   }
   if (dom.entryTabGuide) {
     dom.entryTabGuide.classList.toggle("is-active", isGuide);
@@ -3332,29 +3413,30 @@ function switchEntryPage(target) {
 }
 
 function applyEntryModeUI() {
-  const isXlsx = APP.entryMode === "xlsx";
-  if (dom.sourceModeGroup) dom.sourceModeGroup.classList.toggle("hidden", isXlsx);
-  if (dom.productInput) {
-    dom.productInput.disabled = isXlsx;
-    dom.productInput.placeholder = isXlsx ? "XLSX 匯入模式由檔案內產品資訊判斷" : "例如：EAG119C";
-  }
-  if (dom.pickBtn) dom.pickBtn.textContent = isXlsx ? "📄 選擇 XLSX 檔案" : "📂 選擇上傳檔案";
-  if (dom.analyzeBtn) dom.analyzeBtn.textContent = isXlsx ? "▶ 載入XLSX分析" : "▶ 開始分析";
-  if (dom.sourceRuleText) {
-    dom.sourceRuleText.innerHTML = isXlsx
-      ? "規則：請選擇由本工具匯出的 <code>.xlsx</code>，可一次匯入多個產品檔案，系統會自動合併成多產品比較分析。"
-      : `規則：先勾選模式再上傳。<br>
-          - <code>資料夾匯入</code>：會先抓第一層子目錄作為產品名稱，再到該產品下搜尋站點 RAW DATA。<br>
-          - <code>單選 .TXT 檔案</code>：直接解析你選的單一檔案<br>
-          ※ 僅分析產品目錄開頭為 <code>FAG/EAG/MAG/AAG/KAG/RAG</code> 的資料夾，其餘會略過<br>
-          ※ 掃描後可於「解析範圍勾選」選擇要分析的產品/站點<br>
-          ※ 系統會同步檢查 <code>RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS</code> 並嘗試自動帶入 <code>LOTNO / WAFER ID / 站點</code><br>
-          ※ 若未找到符合產品目錄，可在下方手動輸入 <code>PRODUCT / LOTNO / WAFER ID / 站點</code> 後開始分析（PRODUCT 需以 <code>FAG/EAG/MAG/AAG/KAG/RAG</code> 開頭）`;
-  }
-  if (isXlsx) APP.sourceMode = "xlsx";
-  else if (APP.sourceMode === "xlsx") APP.sourceMode = Array.from(dom.sourceModeRadios).find((r) => r.checked)?.value ?? "folder";
+  syncSourceModeUI();
   renderScopeSelection();
   updateAnalyzeState();
+}
+
+function syncSourceModeUI() {
+  const selected = getSelectedSourceMode();
+  APP.sourceMode = selected;
+  const isXlsx = selected === "xlsx";
+  if (dom.pickBtn) {
+    if (selected === "folder") dom.pickBtn.textContent = "📂 選擇資料夾";
+    else if (selected === "txt") dom.pickBtn.textContent = "📄 選擇 TXT 檔案";
+    else dom.pickBtn.textContent = "📊 匯xlsx";
+  }
+  if (dom.analyzeBtn) dom.analyzeBtn.textContent = isXlsx ? "▶ 載入XLSX分析" : "▶ 開始分析";
+  if (dom.sourceRuleText) {
+    if (selected === "folder") {
+      dom.sourceRuleText.innerHTML = "規則：會讀取符合 <code>產品主目錄/RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/home/*/rawdata</code> 的 .TXT，掃描後可在下方勾選產品/站點再分析。";
+    } else if (selected === "txt") {
+      dom.sourceRuleText.innerHTML = "規則：直接解析你選擇的單一/多個 TXT 文字檔；若無法自動辨識產品欄位，可在下方測試資訊手動補齊。";
+    } else {
+      dom.sourceRuleText.innerHTML = "規則：請選擇由本工具匯出的 <code>.xlsx</code>，可一次匯入多檔，系統會自動合併為多產品比較分析。";
+    }
+  }
 }
 
 function stripAiWakeupSection(markdown) {
@@ -3384,8 +3466,17 @@ async function initializeGuidePage() {
 
   markdown = stripAiWakeupSection(markdown);
   if (!markdown.trim()) {
-    dom.guideContent.textContent = "無法載入操作說明（README）。";
-    return;
+    markdown = `
+# 操作說明
+
+## 匯入資料
+1. 選擇匯入模式：上傳資料夾 / TXT文字檔 / 匯xlsx  
+2. 完成匯入後，勾選要分析的產品與站點  
+3. 按「開始分析」產生圖表與報表  
+
+## 匯出
+- 分析後可按「匯出 XLSX」輸出結果並支援回灌匯入。
+`;
   }
 
   if (window.marked && typeof window.marked.parse === "function") {
@@ -3393,4 +3484,5 @@ async function initializeGuidePage() {
   } else {
     dom.guideContent.textContent = markdown;
   }
+  bindZoomableImages(dom.guideContent);
 }
