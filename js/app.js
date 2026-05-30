@@ -151,8 +151,8 @@ dom.scopeSelectList?.addEventListener("change", onScopeSelectionChange);
 dom.scopeSelectList?.addEventListener("click", onScopeSelectionClick);
 dom.folderMeta?.addEventListener("change", onScopeSelectionChange);
 dom.folderMeta?.addEventListener("click", onMetaScopeMenuClick);
-dom.scopeSelectAll?.addEventListener("click", () => toggleAllScopes(true));
-dom.scopeSelectNone?.addEventListener("click", () => toggleAllScopes(false));
+dom.scopeSelectAll?.addEventListener("click", () => { console.log("[TTO] 全選 clicked"); toggleAllScopes(true); });
+dom.scopeSelectNone?.addEventListener("click", () => { console.log("[TTO] 全不選 clicked"); toggleAllScopes(false); });
 dom.scopeToggleBtn?.addEventListener("click", onScopeToggleClick);
 dom.importWorkspaceToggleBtn?.addEventListener("click", onImportWorkspaceToggleClick);
 dom.folderMeta?.addEventListener("input", onMetaInputChange);
@@ -165,6 +165,7 @@ for (const radio of dom.sourceModeRadios) {
 document.addEventListener("click", onDocumentClick);
 document.addEventListener("click", onGlobalZoomableImageClick, true);
 document.addEventListener("keydown", onDocumentKeydown);
+console.log("[TTO] Event binding complete. scopeSelectAll=", !!dom.scopeSelectAll, "scopeSelectNone=", !!dom.scopeSelectNone, "folderMeta=", !!dom.folderMeta);
 
 initializeGuidePage();
 initializeGroupingMapping();
@@ -604,6 +605,7 @@ function closeScopeMenus() {
 
 function onMetaScopeMenuClick(event) {
   const btn = event.target instanceof Element ? event.target.closest("[data-meta-scope-menu-toggle]") : null;
+  console.log("[TTO] onMetaScopeMenuClick fired, btn=", btn);
   if (!btn || !dom.folderMeta) return;
   event.stopPropagation();
   const menuKey = btn.getAttribute("data-meta-scope-menu-toggle");
