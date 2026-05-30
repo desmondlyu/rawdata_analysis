@@ -549,12 +549,14 @@ function renderScopeSelection() {
 function onScopeSelectionChange(event) {
   const target = event.target;
   if (!(target instanceof HTMLInputElement)) return;
+  const openMenuKey = dom.folderMeta?.querySelector(".meta-scope-menu:not(.hidden)")?.getAttribute("data-meta-scope-menu") || null;
   if (target.hasAttribute("data-scope-product")) {
     const productName = target.getAttribute("data-scope-product");
     if (!productName) return;
     setProductScopeSelection(productName, target.checked);
     renderScopeSelection();
     renderMeta(buildMetaCards());
+    if (openMenuKey) reopenMetaScopeMenu(openMenuKey);
     updateAnalyzeState();
     return;
   }
@@ -564,6 +566,7 @@ function onScopeSelectionChange(event) {
     setStationScopeSelection(stationName, target.checked);
     renderScopeSelection();
     renderMeta(buildMetaCards());
+    if (openMenuKey) reopenMetaScopeMenu(openMenuKey);
     updateAnalyzeState();
     return;
   }
@@ -574,9 +577,18 @@ function onScopeSelectionChange(event) {
     else APP.selectedScopes.delete(key);
     renderScopeSelection();
     renderMeta(buildMetaCards());
+    if (openMenuKey) reopenMetaScopeMenu(openMenuKey);
     updateAnalyzeState();
     return;
   }
+}
+
+function reopenMetaScopeMenu(menuKey) {
+  if (!dom.folderMeta) return;
+  const menu = dom.folderMeta.querySelector(`[data-meta-scope-menu="${menuKey}"]`);
+  const btn = dom.folderMeta.querySelector(`[data-meta-scope-menu-toggle="${menuKey}"]`);
+  if (menu) menu.classList.remove("hidden");
+  if (btn) btn.setAttribute("aria-expanded", "true");
 }
 
 function onScopeSelectionClick(event) {
@@ -3033,7 +3045,7 @@ function renderStationReductionChart() {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { labels: { color: "#cbd5e1" }, title: { display: true, text: "Scenario vs Baseline（By 產品；全部站點合計）" } },
+        legend: { labels: { color: "#cbd5e1" }, title: { display: true, text: "整體測試時間縮減比例 By Product" } },
         tooltip: {
           callbacks: {
             label: (context) => {
@@ -3174,7 +3186,6 @@ function renderCharts() {
     APP.charts.groupMean = renderGroupMetricChart("group-mean-chart", "mean", "Group Mean (s)", "#10b981");
     APP.charts.groupRange = renderGroupMetricChart("group-range-chart", "range", "Group Range (s)", "#f59e0b");
     APP.charts.groupRatio = renderGroupMetricChart("group-tt-ratio-chart", "ttRatio", "Group TT Ratio/站點 (%)", "#a855f7");
-    APP.charts.groupReduction = renderGroupStationReductionChart();
   } else {
     APP.charts.count = renderMetricChart("count-chart", "count", "Count", "#3b82f6");
     APP.charts.mean = renderMetricChart("mean-chart", "mean", "Mean (s)", "#10b981");
