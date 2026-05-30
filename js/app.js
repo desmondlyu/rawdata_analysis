@@ -148,6 +148,9 @@ dom.entryTabAnalysis?.addEventListener("click", () => switchEntryPage("analysis"
 dom.entryTabGuide?.addEventListener("click", () => switchEntryPage("guide"));
 dom.themeToggleBtn?.addEventListener("click", onThemeToggleClick);
 dom.scopeSelectList?.addEventListener("change", onScopeSelectionChange);
+dom.scopeSelectList?.addEventListener("click", onScopeSelectionClick);
+dom.folderMeta?.addEventListener("change", onScopeSelectionChange);
+dom.folderMeta?.addEventListener("click", onMetaScopeMenuClick);
 dom.scopeSelectAll?.addEventListener("click", () => toggleAllScopes(true));
 dom.scopeSelectNone?.addEventListener("click", () => toggleAllScopes(false));
 dom.scopeToggleBtn?.addEventListener("click", onScopeToggleClick);
@@ -160,6 +163,7 @@ for (const radio of dom.sourceModeRadios) {
   radio.addEventListener("change", onSourceModeRadioChange);
 }
 document.addEventListener("click", onDocumentClick);
+document.addEventListener("click", onGlobalZoomableImageClick, true);
 document.addEventListener("keydown", onDocumentKeydown);
 
 initializeGuidePage();
@@ -197,6 +201,14 @@ function onZoomableImageClick(event) {
   openImageLightbox(img.currentSrc || img.src, img.alt || "放大圖片");
 }
 
+function onGlobalZoomableImageClick(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLImageElement)) return;
+  if (target.closest("#image-lightbox")) return;
+  if (!target.hasAttribute("data-zoomable") && !target.classList.contains("js-zoomable") && !target.classList.contains("import-example-image")) return;
+  openImageLightbox(target.currentSrc || target.src, target.alt || "放大圖片");
+}
+
 function onLightboxBackdropClick(event) {
   if (event.target !== dom.imageLightbox) return;
   closeImageLightbox();
@@ -228,6 +240,7 @@ function bindZoomableImages(container) {
   const images = container.querySelectorAll("img");
   for (const image of images) {
     image.classList.add("js-zoomable");
+    image.setAttribute("data-zoomable", "true");
     image.addEventListener("click", onZoomableImageClick);
   }
 }
@@ -288,20 +301,20 @@ function onPickSourceClick() {
     dom.folderInput.click();
     return;
   }
-
-  function getSelectedSourceMode() {
-    return Array.from(dom.sourceModeRadios).find((r) => r.checked)?.value ?? "folder";
-  }
-
-  function onSourceModeRadioChange() {
-    const selected = getSelectedSourceMode();
-    APP.sourceMode = selected;
-    syncSourceModeUI();
-    renderScopeSelection();
-    updateAnalyzeState();
-  }
   dom.txtInput.value = "";
   dom.txtInput.click();
+}
+
+function getSelectedSourceMode() {
+  return Array.from(dom.sourceModeRadios).find((r) => r.checked)?.value ?? "folder";
+}
+
+function onSourceModeRadioChange() {
+  const selected = getSelectedSourceMode();
+  APP.sourceMode = selected;
+  syncSourceModeUI();
+  renderScopeSelection();
+  updateAnalyzeState();
 }
 
 function showMessage(text, type = "info") {
@@ -480,9 +493,34 @@ function isProductPartiallySelected(productName) {
   return selectedCount > 0 && selectedCount < entries.length;
 }
 
+function getSelectableEntriesByProduct(productName) {
+  return getSelectableStationEntries().filter((entry) => entry.product.name === productName);
+}
+
+function isStationFullySelected(stationName) {
+  const entries = getSelectableStationEntries().filter((entry) => entry.station.name === stationName);
+  if (!entries.length) return false;
+  return entries.every((entry) => APP.selectedScopes.has(entry.key));
+}
+
+function isStationPartiallySelected(stationName) {
+  const entries = getSelectableStationEntries().filter((entry) => entry.station.name === stationName);
+  if (!entries.length) return false;
+  const selectedCount = entries.filter((entry) => APP.selectedScopes.has(entry.key)).length;
+  return selectedCount > 0 && selectedCount < entries.length;
+}
+
 function setProductScopeSelection(productName, checked) {
   for (const entry of getSelectableStationEntries()) {
     if (entry.product.name !== productName) continue;
+    if (checked) APP.selectedScopes.add(entry.key);
+    else APP.selectedScopes.delete(entry.key);
+  }
+}
+
+function setStationScopeSelection(stationName, checked) {
+  for (const entry of getSelectableStationEntries()) {
+    if (entry.station.name !== stationName) continue;
     if (checked) APP.selectedScopes.add(entry.key);
     else APP.selectedScopes.delete(entry.key);
   }
@@ -492,47 +530,16 @@ function renderScopeSelection() {
   if (!dom.scopeSelectPanel || !dom.scopeSelectList || !dom.scopeSelectSummary) return;
   const show = APP.sourceMode === "folder" && getSelectableStationEntries().length > 0;
   dom.scopeSelectPanel.classList.toggle("hidden", !show);
-  if (!show) return;
-
-  const byProduct = new Map();
-  for (const entry of getSelectableStationEntries()) {
-    const arr = byProduct.get(entry.product.name) ?? [];
-    arr.push(entry);
-    byProduct.set(entry.product.name, arr);
+  if (!show) {
+    dom.scopeSelectList.innerHTML = "";
+    return;
   }
 
-  const blocks = [];
-  const productNames = Array.from(byProduct.keys()).sort((a, b) => a.localeCompare(b));
-  for (const productName of productNames) {
-    const entries = byProduct.get(productName) ?? [];
-    const stationChecks = entries
-      .sort((a, b) => a.station.name.localeCompare(b.station.name))
-      .map((entry) => {
-        const checked = APP.selectedScopes.has(entry.key) ? "checked" : "";
-        return `<label class="scope-check"><input type="checkbox" data-scope-station="${escapeHtml(entry.key)}" ${checked}>${escapeHtml(entry.station.name)} <span class="hint-text">(${entry.station.rawTxtFiles.length} 檔)</span></label>`;
-      })
-      .join("");
-    const productChecked = isProductFullySelected(productName) ? "checked" : "";
-    blocks.push(`
-      <div class="scope-product-card">
-        <div class="scope-product-row">
-          <label class="scope-check scope-check-product"><input type="checkbox" data-scope-product="${escapeHtml(productName)}" ${productChecked}>${escapeHtml(productName)}</label>
-          <span class="hint-text text-xs">${entries.length} 站點</span>
-        </div>
-        <div class="scope-station-list">${stationChecks}</div>
-      </div>
-    `);
-  }
-
-  dom.scopeSelectList.innerHTML = blocks.join("");
-  for (const checkbox of dom.scopeSelectList.querySelectorAll("[data-scope-product]")) {
-    const productName = checkbox.getAttribute("data-scope-product");
-    if (!productName) continue;
-    checkbox.indeterminate = isProductPartiallySelected(productName);
-  }
+  const entries = getSelectableStationEntries();
+  dom.scopeSelectList.innerHTML = "";
 
   const selectedStations = getSelectedStationEntries().length;
-  const totalStations = getSelectableStationEntries().length;
+  const totalStations = entries.length;
   const selectedFiles = getSelectedRawTxtCount();
   dom.scopeSelectSummary.textContent = `目前已勾選 ${selectedStations}/${totalStations} 個站點，共 ${selectedFiles} 個 .TXT 檔案。`;
   syncScopeCollapsedUI();
@@ -546,6 +553,16 @@ function onScopeSelectionChange(event) {
     if (!productName) return;
     setProductScopeSelection(productName, target.checked);
     renderScopeSelection();
+    renderMeta(buildMetaCards());
+    updateAnalyzeState();
+    return;
+  }
+  if (target.hasAttribute("data-scope-station-name")) {
+    const stationName = target.getAttribute("data-scope-station-name");
+    if (!stationName) return;
+    setStationScopeSelection(stationName, target.checked);
+    renderScopeSelection();
+    renderMeta(buildMetaCards());
     updateAnalyzeState();
     return;
   }
@@ -555,7 +572,57 @@ function onScopeSelectionChange(event) {
     if (target.checked) APP.selectedScopes.add(key);
     else APP.selectedScopes.delete(key);
     renderScopeSelection();
+    renderMeta(buildMetaCards());
     updateAnalyzeState();
+    return;
+  }
+}
+
+function onScopeSelectionClick(event) {
+  const btn = event.target instanceof Element ? event.target.closest("[data-scope-menu-toggle]") : null;
+  if (!btn) return;
+  event.stopPropagation();
+  const targetKey = btn.getAttribute("data-scope-menu-toggle");
+  if (!targetKey) return;
+  const targetMenu = dom.scopeSelectList?.querySelector(`[data-scope-menu="${targetKey}"]`);
+  if (!targetMenu) return;
+  const willOpen = targetMenu.classList.contains("hidden");
+  closeScopeMenus();
+  targetMenu.classList.toggle("hidden", !willOpen);
+  btn.setAttribute("aria-expanded", willOpen ? "true" : "false");
+}
+
+function closeScopeMenus() {
+  if (!dom.scopeSelectList) return;
+  for (const menu of dom.scopeSelectList.querySelectorAll("[data-scope-menu]")) {
+    menu.classList.add("hidden");
+  }
+  for (const btn of dom.scopeSelectList.querySelectorAll("[data-scope-menu-toggle]")) {
+    btn.setAttribute("aria-expanded", "false");
+  }
+}
+
+function onMetaScopeMenuClick(event) {
+  const btn = event.target instanceof Element ? event.target.closest("[data-meta-scope-menu-toggle]") : null;
+  if (!btn || !dom.folderMeta) return;
+  event.stopPropagation();
+  const menuKey = btn.getAttribute("data-meta-scope-menu-toggle");
+  if (!menuKey) return;
+  const targetMenu = dom.folderMeta.querySelector(`[data-meta-scope-menu="${menuKey}"]`);
+  if (!targetMenu) return;
+  const willOpen = targetMenu.classList.contains("hidden");
+  closeMetaScopeMenus();
+  targetMenu.classList.toggle("hidden", !willOpen);
+  btn.setAttribute("aria-expanded", willOpen ? "true" : "false");
+}
+
+function closeMetaScopeMenus() {
+  if (!dom.folderMeta) return;
+  for (const menu of dom.folderMeta.querySelectorAll("[data-meta-scope-menu]")) {
+    menu.classList.add("hidden");
+  }
+  for (const btn of dom.folderMeta.querySelectorAll("[data-meta-scope-menu-toggle]")) {
+    btn.setAttribute("aria-expanded", "false");
   }
 }
 
@@ -565,6 +632,7 @@ function toggleAllScopes(checked) {
     else APP.selectedScopes.delete(entry.key);
   }
   renderScopeSelection();
+  renderMeta(buildMetaCards());
   updateAnalyzeState();
 }
 
@@ -982,6 +1050,7 @@ function buildMetaCards() {
       lotNo: formatValueList(Array.from(product.lotNos).sort()),
       waferId: formatValueList(Array.from(product.waferIds).sort()),
       station: formatValueList(stationNames),
+      stationNames,
       process: product.process || "",
       density: product.density || "",
       voltage: product.voltage || "",
@@ -1003,6 +1072,14 @@ function renderMeta(cards) {
   dom.folderMeta.innerHTML = cards
     .map((card) => {
       const manualEditable = Boolean(card.manualEditable);
+      const productName = String(card.product ?? "");
+      const productEntries = getSelectableEntriesByProduct(productName);
+      const canScopeSelect = APP.sourceMode === "folder" && !manualEditable && productEntries.length > 0;
+      const selectedProductStations = productEntries.filter((entry) => APP.selectedScopes.has(entry.key));
+      const selectedStationNames = Array.from(new Set(selectedProductStations.map((entry) => entry.station.name))).sort((a, b) => a.localeCompare(b));
+      const stationText = canScopeSelect
+        ? formatValueList(selectedStationNames)
+        : String(card.station ?? "-");
       const productChip = manualEditable
         ? `<div class="meta-chip meta-input-chip"><div class="meta-key">PRODUCT</div><input type="text" class="meta-input" data-manual-field="product" value="${escapeHtml(String(card.product || ""))}" placeholder="請輸入產品名稱"></div>`
         : `<div class="meta-chip"><div class="meta-key">PRODUCT</div><div class="meta-value">${escapeHtml(String(card.product ?? "-"))}</div></div>`;
@@ -1012,9 +1089,23 @@ function renderMeta(cards) {
       const waferChip = manualEditable
         ? `<div class="meta-chip meta-input-chip"><div class="meta-key">WAFER ID</div><input type="text" class="meta-input" data-manual-field="waferId" value="${escapeHtml(String(card.waferId || ""))}" placeholder="請輸入 WAFER ID"></div>`
         : `<div class="meta-chip"><div class="meta-key">WAFER ID</div><div class="meta-value">${escapeHtml(String(card.waferId ?? "-"))}</div></div>`;
+      const stationMenu = canScopeSelect
+        ? `
+          <div class="meta-scope-filter mt-1">
+            <button type="button" class="meta-scope-trigger" data-meta-scope-menu-toggle="${escapeHtml(productName)}" aria-expanded="false">下拉多選（${selectedProductStations.length}/${productEntries.length}）</button>
+            <div class="meta-scope-menu hidden" data-meta-scope-menu="${escapeHtml(productName)}">
+              <label class="meta-scope-item"><input type="checkbox" data-scope-product="${escapeHtml(productName)}" ${isProductFullySelected(productName) ? "checked" : ""}> 勾選產品 ${escapeHtml(productName)}</label>
+              ${productEntries
+                .sort((a, b) => a.station.name.localeCompare(b.station.name))
+                .map((entry) => `<label class="meta-scope-item"><input type="checkbox" data-scope-station="${escapeHtml(entry.key)}" ${APP.selectedScopes.has(entry.key) ? "checked" : ""}> ${escapeHtml(entry.station.name)} <span class="hint-text">(${entry.station.rawTxtFiles.length} 檔)</span></label>`)
+                .join("")}
+            </div>
+          </div>
+        `
+        : "";
       const stationChip = manualEditable
         ? `<div class="meta-chip meta-input-chip"><div class="meta-key">站點</div><input type="text" class="meta-input" data-manual-field="station" value="${escapeHtml(String(card.station || ""))}" placeholder="請輸入站點"></div>`
-        : `<div class="meta-chip"><div class="meta-key">站點</div><div class="meta-value">${escapeHtml(String(card.station ?? "-"))}</div></div>`;
+        : `<div class="meta-chip"><div class="meta-key">站點</div><div class="meta-value">${escapeHtml(stationText)}</div>${stationMenu}</div>`;
       return `
       <div class="meta-row">
         ${productChip}
@@ -1037,6 +1128,11 @@ function renderMeta(cards) {
     `;
     })
     .join("");
+  for (const checkbox of dom.folderMeta.querySelectorAll("input[data-scope-product]")) {
+    const productName = checkbox.getAttribute("data-scope-product");
+    if (!productName) continue;
+    checkbox.indeterminate = isProductPartiallySelected(productName);
+  }
   dom.folderMeta.classList.remove("hidden");
 }
 
@@ -1854,9 +1950,16 @@ function onChartProductFilterItemChange(event) {
 function onDocumentClick(event) {
   const target = event.target;
   if (!(target instanceof Element)) return;
-  if (target.closest(".chart-multi-filter")) return;
-  closeChartProductFilterMenu();
-  closeAllChartMultiFilterMenus();
+  if (!target.closest(".chart-multi-filter")) {
+    closeChartProductFilterMenu();
+    closeAllChartMultiFilterMenus();
+  }
+  if (!target.closest(".scope-multi-filter")) {
+    closeScopeMenus();
+  }
+  if (!target.closest(".meta-scope-filter")) {
+    closeMetaScopeMenus();
+  }
 }
 
 function onChartMultiFilterToggle(event, key) {
@@ -3448,36 +3551,112 @@ function stripAiWakeupSection(markdown) {
 
 async function initializeGuidePage() {
   if (!dom.guideContent) return;
-  const sources = [
-    "README.md",
-    "https://raw.githubusercontent.com/desmondlyu/rawdata_analysis/main/README.md",
-  ];
-  let markdown = "";
-  for (const src of sources) {
-    try {
-      const resp = await fetch(src, { cache: "no-store" });
-      if (!resp.ok) continue;
-      markdown = await resp.text();
-      if (markdown.trim()) break;
-    } catch (_err) {
-      // try next source
-    }
-  }
+  const markdown = stripAiWakeupSection(`
+# Rawdata 分析工具（使用者說明）
 
-  markdown = stripAiWakeupSection(markdown);
-  if (!markdown.trim()) {
-    markdown = `
-# 操作說明
+## 系統介紹
 
-## 匯入資料
-1. 選擇匯入模式：上傳資料夾 / TXT文字檔 / 匯xlsx  
-2. 完成匯入後，勾選要分析的產品與站點  
-3. 按「開始分析」產生圖表與報表  
+本工具用於分析 NOR Flash CP 測試資料，提供：
+- 站點與產品維度的統計比較
+- 單一統計報表中的 Group 分層展開（Group → Test Item）
+- 模擬欄位調整後的即時圖表變化
 
-## 匯出
-- 分析後可按「匯出 XLSX」輸出結果並支援回灌匯入。
-`;
-  }
+重點頁面包含：
+1. **統計圖表**
+2. **統計報表**
+3. **Site / Touch Down 熱圖**
+
+---
+
+## 操作方式
+
+1. 匯入資料（資料夾、TXT 或匯入既有 XLSX）。
+   - 多產品資料夾建議格式：
+
+\`\`\`text
+資料夾根目錄/
+├─ AAG106/
+│  ├─ RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/
+│  │  └─ home/*/rawdata/*.TXT
+│  └─ ...
+├─ EAG119/
+│  ├─ RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/
+│  │  └─ home/*/rawdata/*.TXT
+│  └─ ...
+└─ FAG102/
+   └─ RW_*_LOTNO_WAFERID_站點_YYYYMMDDHHMMSS/
+      └─ home/*/rawdata/*.TXT
+\`\`\`
+
+2. 選擇要分析的產品與站點後按「開始分析」。
+3. 在「統計圖表」可查看：
+   - 測試項圖表
+   - 群組化圖表
+4. 在「統計報表」中先看 Group 彙總列，再按 \`+\` 展開該 Group 的 Test Item 詳細值與模擬欄位。
+5. 需要模擬時，在展開後的 Test Item 輸入「模擬 Mean / 模擬 Range」，圖表會同步更新。
+6. 需要回到原始值時，按「重置模擬」。
+
+---
+
+---
+
+## 統計報表介紹
+
+### Group 分層顯示
+- 第一層：\`Group\` 彙總列（依 Mapping 將 Test Item 併入群組）
+- 第二層：展開後顯示 \`Test Item\` 明細與模擬欄位
+
+### Group 統計邏輯
+- Group 總測試時間（欄位顯示在 \`Mean(s)\`）：
+  - \`Group TT Total(s) = Σ(Mean_i × Count_i)\`
+- Group TT Ratio/站點(%)：
+  - \`Group TT Ratio(%) = Group TT Total / Σ(Mean_j × Count_j) × 100\`
+- 其中 \`i\` 為該 Group 內的 Test Item，\`j\` 為該站點全部 Test Item。
+
+### Test Item 模擬統計邏輯
+- \`Scenario Effective Mean = Scenario Mean × (Scenario Range / Base Range)\`（Base Range = 0 時倍率視為 1）
+- \`Scenario TT Ratio(%) = Scenario Effective Mean × Count / Σ(Base Mean × Count) × 100\`
+- 分母固定為 Baseline 站點總量，因此只會反映被調整項目，不會因分母連動影響其他項。
+
+---
+
+## 重要說明
+
+1. 模擬值只影響畫面計算，不會改動原始資料。
+2. 群組化規則已內建於程式靜態檔，不需讀取外部 Mapping 檔。
+3. 匯出結果以系統當前支援內容為準；若未看到預期欄位，請先確認目前版本說明。
+
+---
+
+## 常見問題
+
+### Q1：為什麼統計報表的 Group 會出現「未分組」？
+A：代表該站點下的 Test Item 沒命中內建對照規則，或名稱不完全一致。
+
+### Q2：為什麼降低百分比圖沒有 bar？
+A：通常是尚未在對應報表輸入模擬值，或篩選條件把產品過濾掉。
+
+### Q3：我只改一個產品，為什麼看不到其他產品 bar？
+A：目前圖表會保留所有產品。未輸入模擬值的產品會以 \`0%\` 顯示；有輸入模擬值的產品會顯示對應縮減比例。
+
+### Q4：為什麼 Group 列沒有模擬輸入框？
+A：Group 僅做彙總，模擬調整在展開後的 Test Item 層操作，Group 會即時反映彙總結果。
+
+### Q5：如何快速恢復原始結果？
+A：按「重置模擬」即可。
+
+---
+
+## 版本歷史
+
+| 版本 | 日期 | 說明 |
+|---|---|---|
+| 1.0 | 2026-05-27 | 初版上線 |
+| 1.5 | 2026-05-29 | 新增模擬欄位、降低百分比圖、多產品比較 |
+| 1.6 | 2026-05-29 | 新增群組化圖表與群組化報表（雙標籤） |
+| 1.7 | 2026-05-29 | 新增群組化報表專用降低百分比圖，並修正僅顯示有模擬變更產品的 bar |
+| 1.8 | 2026-05-29 | 統計報表改為 Group 分層展開（Group→Test Item），移除群組化報表模擬圖與報表分頁，補充統計公式 |
+`);
 
   if (window.marked && typeof window.marked.parse === "function") {
     dom.guideContent.innerHTML = window.marked.parse(markdown);
